@@ -323,6 +323,14 @@
     </div>
 
     <div class="setup-card">
+      <div class="setup-title" style="color:#f4c430">🔧 CONNECTION TESTER</div>
+      <div class="setup-desc">Tap each button to confirm your connections are working before scanning.</div>
+      <button class="save-btn" style="background:#1a1f2e;color:#dde3ee;margin-bottom:8px;width:100%" onclick="testProxy()">TEST POLYGON PROXY →</button>
+      <button class="save-btn" style="background:#1a1f2e;color:#dde3ee;margin-bottom:8px;width:100%" onclick="testClaude()">TEST CLAUDE PROXY →</button>
+      <div id="test-result" style="margin-top:8px;font-size:11px;line-height:1.8;color:#3a4255"></div>
+    </div>
+
+    <div class="setup-card">
       <div class="setup-title">📱 ADD TO HOME SCREEN</div>
       <div class="setup-desc">
         1. Open this page in <strong style="color:#dde3ee">Safari</strong><br>
@@ -639,38 +647,59 @@ Respond ONLY with raw JSON, no markdown, no backticks:
 }`;
 
   let result;
+  let claudeError = null;
+
+  // ── DEBUG: confirm what URL we are hitting ──────────────
+  const claudeUrl = proxyUrl
+    ? `${proxyUrl}/api/claude`
+    : "https://api.anthropic.com/v1/messages";
+  showStatus(`🤖 Calling Claude via: ${claudeUrl}`, "");
+  console.log("[Scanner] Claude URL:", claudeUrl);
+  console.log("[Scanner] proxyUrl value:", proxyUrl);
+
   try{
-    const res=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        ...(apiKey?{"x-api-key":apiKey,"anthropic-version":"2023-06-01"}:{})
-      },
-      body:JSON.stringify({
-        model:"claude-sonnet-4-20250514",
-        max_tokens:1500,
-        system:"You are a strict swing trading analyst. Return raw JSON only. Never force trades when criteria aren't met. Apply news filter rigorously.",
-        messages:[{role:"user",content:prompt}]
+    const res = await fetch(claudeUrl, {
+      method: "POST",
+      headers: proxyUrl
+        ? { "Content-Type": "application/json" }
+        : { "Content-Type": "application/json", ...(apiKey?{"x-api-key":apiKey,"anthropic-version":"2023-06-01"}:{}) },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1500,
+        system: "You are a strict swing trading analyst. Return raw JSON only. Never force trades when criteria aren't met. Apply news filter rigorously.",
+        messages: [{role:"user", content:prompt}]
       })
     });
-    const raw=await res.json();
-    const text=(raw.content||[]).map(c=>c.text||"").join("");
-    result=JSON.parse(text.replace(/```json|```/g,"").trim());
-  }catch(e){
-    // Demo fallback
+
+    console.log("[Scanner] Claude response status:", res.status);
+    const raw = await res.json();
+    console.log("[Scanner] Claude raw response:", JSON.stringify(raw).slice(0,300));
+
+    if(raw.error) throw new Error("Claude API error: " + raw.error.message);
+    const text = (raw.content||[]).map(c=>c.text||"").join("");
+    if(!text) throw new Error("Empty response from Claude");
+    result = JSON.parse(text.replace(/```json|```/g,"").trim());
+    showStatus("✅ Real Claude analysis complete", "ok");
+
+  } catch(e) {
+    claudeError = e.message;
+    console.error("[Scanner] Claude FAILED:", e.message);
+    showStatus(`❌ Claude error: ${e.message} — showing demo data`, "warn");
+
+    // Demo fallback — clearly labelled
     const q=Object.values(data).filter(s=>s.dipDollars>=10&&s.rsi<40&&s.volRatio>=1.2&&s.distFromLow>10);
     result=q.length===0
-      ?{verdict:"NO TRADES TODAY — STAY CASH",summary:"No AI stocks show all required swing signals right now. RSI levels not yet oversold or dips insufficient. Stay in cash.",trades:[]}
-      :{verdict:"TRADES FOUND",summary:`${q.length} stock(s) show classic dip-and-bounce setup with oversold RSI and capitulation volume.`,
+      ?{verdict:"⚠ DEMO — NO TRADES (Claude offline)",summary:`Claude call failed: ${e.message}. Fix in Setup tab then rescan.`,trades:[]}
+      :{verdict:"⚠ DEMO DATA — Claude offline",summary:`Claude call failed: ${e.message}. Results below are simulated, NOT real analysis.`,
         trades:q.slice(0,3).map((s,i)=>({
           ticker:s.ticker,score:88-i*9,action:"BUY DIP",
           entryPrice:s.curr,
           targetPrice:parseFloat((s.curr+s.dipDollars*0.75).toFixed(2)),
           stopLoss:parseFloat((s.curr-s.dipDollars*0.4).toFixed(2)),
           holdDays:"1–2",
-          reason:`RSI ${s.rsi} oversold, ${s.volRatio}x avg volume signals capitulation. $${s.dipDollars} dip from $${s.prev}.`,
-          newsFlag:"SAFE — dip is technical",
-          newsSummary:"No major negative catalysts detected. Dip appears technical.",
+          reason:`⚠ DEMO: RSI ${s.rsi} oversold, ${s.volRatio}x avg volume. Claude offline — do not trade on this.`,
+          newsFlag:"⚠ DEMO — not real analysis",
+          newsSummary:"Claude API not connected. See Setup tab.",
           riskLevel:s.rsi<28?"Low":"Medium"
         }))};
   }
@@ -847,6 +876,58 @@ function renderJournal(){
       <div class="${e.pnl>=0?"je-win":"je-loss"} je-pnl">${e.pnl>=0?"+":""}\$${e.pnl.toFixed(0)}</div>
       <button class="je-del" onclick="deleteTrade(${e.id})">🗑</button>
     </div>`).join("");
+}
+
+// ══════════════════════════════════════════════════════
+// CONNECTION TESTERS
+// ══════════════════════════════════════════════════════
+async function testProxy(){
+  const el = document.getElementById("test-result");
+  const url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
+  if(!url){ el.innerHTML='<span style="color:#ff4444">❌ No proxy URL entered in field above</span>'; return; }
+  el.innerHTML='<span style="color:#f4c430">⏳ Testing Polygon proxy...</span>';
+  try{
+    const resp = await fetch(`${url}/api/stocks?tickers=NVDA`);
+    const json = await resp.json();
+    const s = json.stocks?.[0];
+    if(s && s.curr){
+      el.innerHTML=`<span style="color:#00e5a0">✅ POLYGON PROXY WORKING<br>NVDA: $${s.curr} | RSI: ${s.rsi||"pending"} | Vol: ${(s.vol/1e6).toFixed(1)}M</span>`;
+    } else {
+      el.innerHTML=`<span style="color:#ff4444">❌ Proxy responded but no stock data. Check POLYGON_API_KEY in Vercel env vars.<br>Response: ${JSON.stringify(json).slice(0,100)}</span>`;
+    }
+  }catch(e){
+    el.innerHTML=`<span style="color:#ff4444">❌ Proxy unreachable: ${e.message}<br>Check your Vercel URL is correct and deployed.</span>`;
+  }
+}
+
+async function testClaude(){
+  const el = document.getElementById("test-result");
+  const url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
+  if(!url){ el.innerHTML='<span style="color:#ff4444">❌ No proxy URL entered</span>'; return; }
+  el.innerHTML='<span style="color:#f4c430">⏳ Testing Claude proxy... (takes 5-10s)</span>';
+  try{
+    const resp = await fetch(`${url}/api/claude`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"claude-sonnet-4-20250514",
+        max_tokens:50,
+        messages:[{role:"user",content:"Reply with just the word CONNECTED"}]
+      })
+    });
+    console.log("[Test] Claude proxy status:", resp.status);
+    const json = await resp.json();
+    console.log("[Test] Claude proxy response:", JSON.stringify(json).slice(0,200));
+    if(json.content?.[0]?.text){
+      el.innerHTML=`<span style="color:#00e5a0">✅ CLAUDE PROXY WORKING<br>Response: "${json.content[0].text}"<br>You should now see usage on console.anthropic.com</span>`;
+    } else if(json.error){
+      el.innerHTML=`<span style="color:#ff4444">❌ Claude returned error: ${json.error.message}<br>Check ANTHROPIC_API_KEY in Vercel env vars.</span>`;
+    } else {
+      el.innerHTML=`<span style="color:#ff4444">❌ Unexpected response: ${JSON.stringify(json).slice(0,150)}</span>`;
+    }
+  }catch(e){
+    el.innerHTML=`<span style="color:#ff4444">❌ Claude proxy unreachable: ${e.message}<br>Check api/claude.js exists in your GitHub repo.</span>`;
+  }
 }
 
 // ══════════════════════════════════════════════════════
