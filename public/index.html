@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="AI Scanner"/>
+  <meta name="theme-color" content="#08090d"/>
+  <title>AI Stock Scanner</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    html,body{height:100%;background:#08090d;color:#dde3ee;font-family:'Courier New',monospace;overflow-x:hidden;}
+    input,button{font-family:'Courier New',monospace;}
+    input::placeholder{color:#1e2535;}
+    ::-webkit-scrollbar{width:3px;}
+    ::-webkit-scrollbar-track{background:#08090d;}
+    ::-webkit-scrollbar-thumb{background:#1a1f2e;border-radius:2px;}
+
+    /* Safe area for iPhone notch */
+    #app{min-height:100vh;padding:env(safe-area-inset-top,20px) 16px env(safe-area-inset-bottom,20px);max-width:600px;margin:0 auto;}
+
+    /* Header */
+    .hdr{padding:18px 0 14px;border-bottom:1px solid #1a1f2e;margin-bottom:18px;}
+    .hdr h1{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#f0f4ff;}
+    .hdr p{font-size:10px;color:#2a3045;letter-spacing:1.5px;margin-top:4px;}
+    .badge{display:inline-block;font-size:8px;letter-spacing:2px;background:#00e5a022;color:#00e5a0;padding:2px 8px;border-radius:10px;border:1px solid #00e5a044;margin-left:8px;vertical-align:middle;}
+
+    /* Tabs */
+    .tabs{display:flex;border-bottom:1px solid #1a1f2e;margin-bottom:18px;}
+    .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:10px 4px;color:#3a4255;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;}
+    .tab.active{color:#5b8fff;border-bottom-color:#5b8fff;}
+
+    /* Buttons */
+    .btn-scan{width:100%;background:linear-gradient(135deg,#2d6aff,#1a45cc);border:none;border-radius:10px;padding:16px;color:#fff;font-size:14px;font-weight:700;letter-spacing:1px;cursor:pointer;box-shadow:0 4px 20px #2d6aff44;transition:all 0.2s;margin-bottom:12px;}
+    .btn-scan:disabled{background:#12151e;color:#2a3045;box-shadow:none;}
+    .btn-notif{width:100%;background:#0a0c16;border:1px solid #1a1f2e;border-radius:10px;padding:13px;color:#3a4255;font-size:11px;letter-spacing:1px;cursor:pointer;margin-bottom:18px;transition:all 0.2s;}
+    .btn-notif.on{border-color:#00e5a066;color:#00e5a0;background:#001a0f;}
+
+    /* Status bar */
+    .status-bar{padding:10px 14px;border-radius:7px;font-size:11px;margin-bottom:14px;border:1px solid #1a1f2e;color:#3a4255;background:#0a0c16;}
+    .status-bar.ok{background:#001a0f;border-color:#00e5a033;color:#00e5a0;}
+    .status-bar.warn{background:#1a1000;border-color:#f4c43033;color:#f4c430;}
+
+    /* Idle */
+    .idle{border:1px dashed #1a1f2e;border-radius:10px;padding:50px 20px;text-align:center;}
+    .idle .icon{font-size:40px;margin-bottom:12px;}
+    .idle p{color:#2a3045;font-size:12px;letter-spacing:1px;line-height:1.8;}
+
+    /* Loading */
+    .loading{text-align:center;padding:40px 0;}
+    .spinner{width:40px;height:40px;border:3px solid #1a1f2e;border-top-color:#2d6aff;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .loadbar{height:3px;background:#1a1f2e;border-radius:2px;overflow:hidden;max-width:300px;margin:16px auto 0;}
+    .loadbar-inner{height:100%;background:linear-gradient(90deg,#2d6aff,#00e5a0);border-radius:2px;animation:bar 3s ease-out forwards;}
+    @keyframes bar{0%{width:0}40%{width:65%}70%{width:82%}100%{width:95%}}
+
+    /* Verdict */
+    .verdict{border-radius:10px;padding:16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start;}
+    .verdict.notrade{background:#140a0a;border:1px solid #ff444422;}
+    .verdict.trade{background:#0a140f;border:1px solid #00e5a022;}
+    .verdict-icon{font-size:24px;flex-shrink:0;}
+    .verdict-title{font-size:12px;font-weight:700;letter-spacing:1px;margin-bottom:6px;}
+    .verdict.notrade .verdict-title{color:#ff4444;}
+    .verdict.trade .verdict-title{color:#00e5a0;}
+    .verdict-summary{font-size:11px;color:#4a5568;line-height:1.7;}
+    .verdict-meta{font-size:9px;color:#2a3045;margin-top:6px;}
+
+    /* Trade cards */
+    .trade-card{background:#0c0e16;border:1px solid #1a1f2e;border-left:3px solid #2d6aff;border-radius:10px;padding:16px;margin-bottom:12px;}
+    .trade-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+    .trade-ticker{font-size:20px;font-weight:800;color:#f0f4ff;}
+    .pill{font-size:9px;padding:3px 10px;border-radius:20px;letter-spacing:1px;}
+    .pill-action{background:#2d6aff22;color:#5b8fff;border:1px solid #2d6aff44;}
+    .pill-risk-low{background:#00e5a011;color:#00e5a0;border:1px solid #00e5a033;}
+    .pill-risk-med{background:#f4c43011;color:#f4c430;border:1px solid #f4c43033;}
+    .pill-risk-hi{background:#ff444411;color:#ff4444;border:1px solid #ff444433;}
+    .trade-reason{font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:12px;}
+    .price-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+    .price-cell{background:#080a12;border-radius:6px;padding:8px 10px;}
+    .price-label{font-size:8px;color:#2a3045;letter-spacing:1.5px;margin-bottom:3px;}
+    .price-val{font-size:13px;font-weight:700;}
+
+    /* Score badge */
+    .score-badge{width:48px;height:48px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;}
+    .score-num{font-size:15px;font-weight:800;line-height:1;}
+    .score-lbl{font-size:7px;letter-spacing:1px;}
+
+    /* Rescan bar */
+    .rescan{margin-top:16px;padding:12px 14px;background:#0a0c14;border-radius:8px;border:1px solid #1a1f2e;display:flex;justify-content:space-between;align-items:center;gap:10;}
+    .rescan p{color:#2a3045;font-size:10px;flex:1;}
+    .rescan button{background:none;border:1px solid #1a1f2e;border-radius:6px;padding:7px 12px;color:#3a4255;cursor:pointer;font-size:10px;white-space:nowrap;}
+
+    /* Watchlist */
+    .ticker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;}
+    .ticker-chip{background:#0c0e16;border:1px solid #1a1f2e;border-radius:8px;padding:10px 10px;display:flex;justify-content:space-between;align-items:center;}
+    .ticker-name{font-weight:700;font-size:13px;color:#c8d0e8;}
+    .ticker-rm{background:none;border:none;color:#2a3045;font-size:16px;cursor:pointer;padding:0 0 0 6px;line-height:1;}
+    .add-row{display:flex;gap:8px;margin-bottom:4px;}
+    .add-input{flex:1;background:#0c0e16;border:1px solid #1a1f2e;border-radius:8px;padding:12px 14px;color:#dde3ee;font-size:13px;outline:none;}
+    .add-btn{background:#2d6aff;border:none;border-radius:8px;padding:12px 18px;color:#fff;font-weight:700;font-size:12px;cursor:pointer;}
+
+    /* Setup */
+    .setup-card{background:#0c0e16;border:1px solid #1a1f2e;border-radius:10px;padding:18px;margin-bottom:14px;}
+    .setup-title{font-size:12px;font-weight:700;letter-spacing:1px;color:#dde3ee;margin-bottom:6px;}
+    .setup-desc{font-size:10px;color:#2a3045;line-height:1.8;margin-bottom:12px;}
+    .setup-input{width:100%;background:#080a12;border:1px solid #1a1f2e;border-radius:7px;padding:12px 14px;color:#dde3ee;font-size:12px;outline:none;}
+    .setup-input.has-val{border-color:#00e5a066;}
+    .save-btn{margin-top:10px;background:#2d6aff;border:none;border-radius:7px;padding:10px 20px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;}
+    .setup-hint{margin-top:10px;padding:10px 12px;background:#001a0f;border:1px solid #00e5a033;border-radius:6px;font-size:10px;color:#00e5a0;}
+
+    /* Disclaimer */
+    .disclaimer{margin-top:30px;font-size:9px;color:#1e2535;text-align:center;line-height:1.9;letter-spacing:0.5px;}
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <h1>📡 AI Swing Scanner <span class="badge">MANUAL MODE</span></h1>
+    <p id="wl-count">Loading watchlist...</p>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('scanner')">📊 Scanner</button>
+    <button class="tab" onclick="showTab('watchlist')">📋 Watchlist</button>
+    <button class="tab" onclick="showTab('setup')">⚙ Setup</button>
+  </div>
+
+  <!-- ═══ SCANNER TAB ═══ -->
+  <div id="tab-scanner">
+    <button class="btn-scan" id="scan-btn" onclick="runScan()">▶ SCAN NOW</button>
+    <button class="btn-notif" id="notif-btn" onclick="toggleNotif()">🔕 ENABLE HOURLY REMINDER</button>
+    <div class="status-bar" id="fetch-status" style="display:none"></div>
+    <div id="scanner-content">
+      <div class="idle">
+        <div class="icon">🔍</div>
+        <p>Press SCAN NOW to check your stocks for swing setups.<br><br>Claude will only surface trades that meet ALL swing criteria — no forced picks.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ WATCHLIST TAB ═══ -->
+  <div id="tab-watchlist" style="display:none">
+    <div class="add-row">
+      <input class="add-input" id="new-ticker" placeholder="Add ticker e.g. TSLA" maxlength="6"
+        onkeydown="if(event.key==='Enter')addTicker()"/>
+      <button class="add-btn" onclick="addTicker()">+ ADD</button>
+    </div>
+    <p style="font-size:10px;color:#2a3045;letter-spacing:1px;margin-bottom:4px;" id="wl-sub"></p>
+    <div class="ticker-grid" id="ticker-grid"></div>
+  </div>
+
+  <!-- ═══ SETUP TAB ═══ -->
+  <div id="tab-setup" style="display:none">
+    <div class="setup-card">
+      <div class="setup-title">🔑 ANTHROPIC API KEY</div>
+      <div class="setup-desc">Get your key at console.anthropic.com. Stays in your phone only — never sent anywhere except Anthropic.</div>
+      <input class="setup-input" id="api-key-input" type="password" placeholder="sk-ant-api03-..."
+        oninput="document.getElementById('api-key-input').className='setup-input'+(this.value?' has-val':'')"/>
+      <button class="save-btn" onclick="saveKeys()">SAVE</button>
+    </div>
+    <div class="setup-card">
+      <div class="setup-title" style="color:#00e5a0">🌐 VERCEL PROXY URL</div>
+      <div class="setup-desc">Paste your Vercel proxy URL to get real Alpha Vantage prices. Without this, app uses demo data.</div>
+      <input class="setup-input" id="proxy-url-input" type="url" placeholder="https://ai-stock-proxy.vercel.app"
+        oninput="document.getElementById('proxy-url-input').className='setup-input'+(this.value?' has-val':'')"/>
+      <button class="save-btn" onclick="saveKeys()">SAVE</button>
+      <div class="setup-hint" id="proxy-hint" style="display:none">✅ Proxy URL set — next scan will fetch real prices</div>
+    </div>
+    <div class="setup-card">
+      <div class="setup-title">📱 ADD TO HOME SCREEN</div>
+      <div class="setup-desc">
+        You're already viewing this page!<br><br>
+        1. Tap the <strong style="color:#dde3ee">Share button</strong> (box with arrow) in Safari<br>
+        2. Scroll down → tap <strong style="color:#dde3ee">"Add to Home Screen"</strong><br>
+        3. Tap <strong style="color:#dde3ee">"Add"</strong> — done!<br><br>
+        The app icon will appear on your home screen. Opens full screen, no browser UI.
+      </div>
+    </div>
+    <div class="disclaimer">⚠ FOR EDUCATIONAL PURPOSES ONLY · NOT FINANCIAL ADVICE<br>Always do your own research. Past patterns do not guarantee future results.</div>
+  </div>
+
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────
+const DEFAULT_WATCHLIST = [
+  "NVDA","AMD","INTC","AVGO","QCOM","MRVL","ARM","MU",
+  "WDC","STX","SMCI","DELL","HPE",
+  "AMAT","LRCX","KLAC","TER",
+  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","JNPR",
+  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","CFLT",
+  "CRWD","PANW","ZS","S",
+  "TSLA","PATH","ROK","SYM","ARKQ",
+  "ETN","GEV","CEG","VST",
+  "SMH","SOXX","BOTZ","CHAT"
+];
+
+let watchlist = JSON.parse(localStorage.getItem("watchlist") || "null") || DEFAULT_WATCHLIST;
+let apiKey    = localStorage.getItem("apiKey") || "";
+let proxyUrl  = localStorage.getItem("proxyUrl") || "";
+let notifOn   = false;
+let notifTimer= null;
+let scanning  = false;
+
+// ── Init ──────────────────────────────────────────────────────────
+window.onload = () => {
+  renderWatchlist();
+  updateHeader();
+  if (apiKey) document.getElementById("api-key-input").value = apiKey;
+  if (proxyUrl) {
+    document.getElementById("proxy-url-input").value = proxyUrl;
+    document.getElementById("proxy-url-input").className = "setup-input has-val";
+    document.getElementById("proxy-hint").style.display = "block";
+  }
+};
+
+// ── Tabs ─────────────────────────────────────────────────────────
+function showTab(name) {
+  ["scanner","watchlist","setup"].forEach(t => {
+    document.getElementById("tab-"+t).style.display = t===name ? "block" : "none";
+    document.querySelectorAll(".tab").forEach((el,i) => {
+      el.className = "tab" + (["scanner","watchlist","setup"][i]===name ? " active" : "");
+    });
+  });
+}
+
+// ── Header ────────────────────────────────────────────────────────
+function updateHeader() {
+  document.getElementById("wl-count").textContent =
+    `Scanning ${watchlist.length} AI stocks · Manual mode · Hourly reminder available`;
+  document.getElementById("wl-sub").textContent =
+    `${watchlist.length} stocks tracked — tap × to remove, type to add`;
+}
+
+// ── Watchlist ─────────────────────────────────────────────────────
+function renderWatchlist() {
+  const grid = document.getElementById("ticker-grid");
+  grid.innerHTML = watchlist.map(t => `
+    <div class="ticker-chip">
+      <span class="ticker-name">${t}</span>
+      <button class="ticker-rm" onclick="removeTicker('${t}')">×</button>
+    </div>`).join("");
+  updateHeader();
+}
+
+function addTicker() {
+  const inp = document.getElementById("new-ticker");
+  const t = inp.value.trim().toUpperCase();
+  if (t && !watchlist.includes(t)) {
+    watchlist.push(t);
+    localStorage.setItem("watchlist", JSON.stringify(watchlist));
+    renderWatchlist();
+  }
+  inp.value = "";
+}
+
+function removeTicker(t) {
+  watchlist = watchlist.filter(x => x !== t);
+  localStorage.setItem("watchlist", JSON.stringify(watchlist));
+  renderWatchlist();
+}
+
+// ── Save keys ─────────────────────────────────────────────────────
+function saveKeys() {
+  apiKey   = document.getElementById("api-key-input").value.trim();
+  proxyUrl = document.getElementById("proxy-url-input").value.trim().replace(/\/$/, "");
+  localStorage.setItem("apiKey", apiKey);
+  localStorage.setItem("proxyUrl", proxyUrl);
+  const hint = document.getElementById("proxy-hint");
+  hint.style.display = proxyUrl ? "block" : "none";
+  alert("✅ Settings saved!");
+}
+
+// ── Notifications ─────────────────────────────────────────────────
+async function toggleNotif() {
+  if (notifOn) {
+    clearInterval(notifTimer);
+    notifOn = false;
+    document.getElementById("notif-btn").textContent = "🔕 ENABLE HOURLY REMINDER";
+    document.getElementById("notif-btn").className = "btn-notif";
+    return;
+  }
+  if (!("Notification" in window)) return alert("Notifications not supported in this browser.");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return alert("Please allow notifications when prompted.");
+  notifOn = true;
+  document.getElementById("notif-btn").textContent = "🔔 HOURLY REMINDER ON — TAP TO STOP";
+  document.getElementById("notif-btn").className = "btn-notif on";
+  notifTimer = setInterval(() => {
+    new Notification("📈 AI Stock Scanner", {
+      body: "It's been an hour! Open the app and hit SCAN NOW to check for swing setups.",
+    });
+  }, 60 * 60 * 1000);
+}
+
+// ── Simulated data fallback ───────────────────────────────────────
+function simulateStock(ticker) {
+  const seed = ticker.split("").reduce((a,c) => a+c.charCodeAt(0), 0);
+  const rng  = n => ((seed*9301 + 49297*n) % 233280) / 233280;
+  const prev = parseFloat((rng(1)*450+40).toFixed(2));
+  const dip  = rng(2)*0.18-0.01 < 0 ? rng(2)*0.18-0.01 : -(rng(3)*0.08);
+  const curr = parseFloat((prev*(1+dip)).toFixed(2));
+  const vol  = Math.floor(rng(5)*60e6+2e6);
+  const avgV = Math.floor(rng(6)*30e6+8e6);
+  const hi52 = parseFloat((prev*(1+rng(7)*0.4)).toFixed(2));
+  const lo52 = parseFloat((prev*(1-rng(8)*0.45)).toFixed(2));
+  return {
+    ticker, prev, curr,
+    dipDollars: parseFloat((prev-curr).toFixed(2)),
+    dipPct: parseFloat((dip*100).toFixed(2)),
+    rsi: parseFloat((rng(4)*55+15).toFixed(1)),
+    vol, avgVol: avgV,
+    volRatio: parseFloat((vol/avgV).toFixed(2)),
+    week52High: hi52, week52Low: lo52,
+    distFromLow: parseFloat((((curr-lo52)/(hi52-lo52))*100).toFixed(1)),
+  };
+}
+
+// ── Format helpers ────────────────────────────────────────────────
+const fmtM = n => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n?.toLocaleString();
+
+// ── Main scan ─────────────────────────────────────────────────────
+async function runScan() {
+  if (scanning || watchlist.length === 0) return;
+  scanning = true;
+  const btn = document.getElementById("scan-btn");
+  btn.disabled = true;
+  btn.textContent = "⏳ SCANNING...";
+  showStatus("", "");
+  document.getElementById("scanner-content").innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <p style="color:#2d6aff;font-size:11px;letter-spacing:2px;">CLAUDE SCANNING ${watchlist.length} AI STOCKS...</p>
+      <p style="color:#2a3045;font-size:10px;margin-top:6px;">Checking RSI · Volume · Support zones · Bounce probability</p>
+      <div class="loadbar"><div class="loadbar-inner"></div></div>
+    </div>`;
+
+  // 1. Get stock data
+  const data = {};
+  if (proxyUrl) {
+    showStatus("Fetching real prices from Alpha Vantage...", "");
+    try {
+      const resp = await fetch(`${proxyUrl}/api/stocks?tickers=${watchlist.join(",")}`);
+      const json = await resp.json();
+      (json.stocks||[]).forEach(s => { if (!s.error) data[s.ticker] = s; });
+      const failed = (json.stocks||[]).filter(s=>s.error).map(s=>s.ticker);
+      showStatus(
+        failed.length ? `⚠ Real data loaded. Missing: ${failed.join(", ")}` : `✅ Real prices loaded for ${Object.keys(data).length} stocks`,
+        failed.length ? "warn" : "ok"
+      );
+      watchlist.forEach(t => { if (!data[t]) data[t] = simulateStock(t); });
+    } catch(e) {
+      showStatus("⚠ Proxy unreachable — using demo data. Check your Vercel URL in Setup.", "warn");
+      watchlist.forEach(t => { data[t] = simulateStock(t); });
+    }
+  } else {
+    showStatus("ℹ Demo mode — add your Vercel Proxy URL in Setup tab for real prices", "");
+    watchlist.forEach(t => { data[t] = simulateStock(t); });
+  }
+
+  // 2. Build Claude prompt
+  const rows = Object.values(data).map(s =>
+    `${s.ticker}: Price $${s.curr} (was $${s.prev}), Dip $${s.dipDollars} (${s.dipPct}%), ` +
+    `RSI ${s.rsi}, Vol ${fmtM(s.vol)} vs avg ${fmtM(s.avgVol)} (${s.volRatio}x), ` +
+    `52w $${s.week52Low}–$${s.week52High}, ${s.distFromLow}% from 52w low`
+  ).join("\n");
+
+  const prompt = `You are a professional swing trader. Identify stocks showing a genuine dip-and-bounce setup recoverable within 1–2 trading days.
+
+STRICT RULES — stock ONLY qualifies if ALL true:
+1. Dip at least $10 below previous close
+2. RSI below 40 (oversold)
+3. Volume at least 1.2x average (capitulation signal)
+4. distFromLow > 10% (not in freefall below 52w support)
+5. Realistic $15–$30 bounce within 1–2 days
+
+If NO stock meets all criteria, return empty trades array. Do NOT force picks.
+
+TODAY'S DATA:
+${rows}
+
+Respond ONLY with raw JSON, no markdown, no backticks:
+{"verdict":"TRADES FOUND"|"NO TRADES TODAY — STAY CASH","summary":"1-2 sentences on today's AI market conditions","trades":[{"ticker":"NVDA","score":84,"action":"BUY DIP","entryZone":"$450–$455","targetPrice":"$472","stopLoss":"$442","holdDays":"1–2","reason":"Specific reason based on RSI, volume, price level","riskLevel":"Low|Medium|High"}]}`;
+
+  let result;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? {"x-api-key": apiKey, "anthropic-version": "2023-06-01"} : {})
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        system: "You are a strict swing trading analyst. Return raw JSON only. Never force trades.",
+        messages: [{role:"user", content: prompt}]
+      })
+    });
+    const raw = await res.json();
+    const text = (raw.content||[]).map(c=>c.text||"").join("");
+    result = JSON.parse(text.replace(/```json|```/g,"").trim());
+  } catch(e) {
+    // Demo fallback
+    const q = Object.values(data).filter(s => s.dipDollars>=10 && s.rsi<40 && s.volRatio>=1.2 && s.distFromLow>10);
+    result = q.length === 0
+      ? {verdict:"NO TRADES TODAY — STAY CASH", summary:"No AI stocks currently show all required swing trade signals. RSI levels not yet oversold or dips insufficient. Stay in cash and check back next scan.", trades:[]}
+      : {verdict:"TRADES FOUND", summary:`${q.length} stock(s) show classic oversold dip with volume capitulation — high probability bounce setup.`, trades: q.slice(0,3).map((s,i)=>({
+          ticker:s.ticker, score:88-i*9, action:"BUY DIP",
+          entryZone:`$${(s.curr-1).toFixed(0)}–$${(s.curr+2).toFixed(0)}`,
+          targetPrice:`$${(s.curr+s.dipDollars*0.75).toFixed(0)}`,
+          stopLoss:`$${(s.curr-s.dipDollars*0.4).toFixed(0)}`,
+          holdDays:"1–2",
+          reason:`RSI ${s.rsi} oversold, ${s.volRatio}x avg volume signals capitulation. $${s.dipDollars} dip from $${s.prev}.`,
+          riskLevel: s.rsi<28?"Low":"Medium"
+        }))};
+  }
+
+  renderResult(result, data);
+  scanning = false;
+  btn.disabled = false;
+  btn.textContent = "▶ SCAN NOW";
+}
+
+// ── Render result ─────────────────────────────────────────────────
+function renderResult(result, data) {
+  const noTrade = result.trades.length === 0;
+  const now = new Date().toLocaleTimeString();
+  let html = `
+    <div class="verdict ${noTrade?'notrade':'trade'}">
+      <div class="verdict-icon">${noTrade?'🚫':'✅'}</div>
+      <div>
+        <div class="verdict-title">${result.verdict}</div>
+        <div class="verdict-summary">${result.summary}</div>
+        <div class="verdict-meta">Scanned ${watchlist.length} stocks at ${now}</div>
+      </div>
+    </div>`;
+
+  result.trades.forEach(trade => {
+    const sd = data[trade.ticker] || {};
+    const scoreColor = trade.score>=80?"#00e5a0":trade.score>=65?"#f4c430":"#ff6b6b";
+    const riskClass = trade.riskLevel==="Low"?"pill-risk-low":trade.riskLevel==="Medium"?"pill-risk-med":"pill-risk-hi";
+    html += `
+      <div class="trade-card">
+        <div class="trade-head">
+          <div class="score-badge" style="border:2.5px solid ${scoreColor};box-shadow:0 0 12px ${scoreColor}55;">
+            <span class="score-num" style="color:${scoreColor}">${trade.score}</span>
+            <span class="score-lbl" style="color:${scoreColor}99">SCORE</span>
+          </div>
+          <span class="trade-ticker">${trade.ticker}</span>
+          <span class="pill pill-action">${trade.action}</span>
+          <span class="pill ${riskClass}">${trade.riskLevel} RISK</span>
+          <span style="font-size:10px;color:#2a3045;margin-left:auto">${trade.holdDays}d hold</span>
+        </div>
+        <div class="trade-reason">${trade.reason}</div>
+        <div class="price-grid">
+          <div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$${sd.curr||'—'}</div></div>
+          <div class="price-cell"><div class="price-label">DIP FROM</div><div class="price-val" style="color:#ff6b6b">-$${sd.dipDollars||'—'}</div></div>
+          <div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:${(sd.rsi||50)<35?'#00e5a0':'#f4c430'}">${sd.rsi||'—'}</div></div>
+          <div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">${trade.entryZone}</div></div>
+          <div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">${trade.targetPrice}</div></div>
+          <div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">${trade.stopLoss}</div></div>
+        </div>
+      </div>`;
+  });
+
+  html += `
+    <div class="rescan">
+      <p>${notifOn?"You'll get a reminder in ~1 hour.":"Enable hourly reminder so you never miss a setup."}</p>
+      <button onclick="runScan()">↻ SCAN AGAIN</button>
+    </div>`;
+
+  document.getElementById("scanner-content").innerHTML = html;
+}
+
+// ── Status bar ────────────────────────────────────────────────────
+function showStatus(msg, type) {
+  const el = document.getElementById("fetch-status");
+  if (!msg) { el.style.display="none"; return; }
+  el.style.display = "block";
+  el.textContent = msg;
+  el.className = "status-bar" + (type==="ok"?" ok":type==="warn"?" warn":"");
+}
+</script>
+</body>
+</html>
