@@ -2,7 +2,10 @@
   "version": 2,
   "functions": {
     "api/stocks.js": {
-      "maxDuration": 300
+      "maxDuration": 30
+    },
+    "api/claude.js": {
+      "maxDuration": 30
     }
   }
 }
