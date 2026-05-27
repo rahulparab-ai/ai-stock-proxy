@@ -666,7 +666,7 @@ Respond ONLY with raw JSON, no markdown, no backticks:
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
-        system: "You are a strict swing trading analyst. Return raw JSON only. Never force trades when criteria aren't met. Apply news filter rigorously.",
+        system: "You are a strict swing trading analyst. IMPORTANT: Your entire response must be valid JSON only. Start your response with { and end with }. No words, no explanation, no markdown before or after the JSON. Never force trades. Apply news filter rigorously.",
         messages: [{role:"user", content:prompt}]
       })
     });
@@ -678,7 +678,14 @@ Respond ONLY with raw JSON, no markdown, no backticks:
     if(raw.error) throw new Error("Claude API error: " + raw.error.message);
     const text = (raw.content||[]).map(c=>c.text||"").join("");
     if(!text) throw new Error("Empty response from Claude");
-    result = JSON.parse(text.replace(/```json|```/g,"").trim());
+
+    // Extract JSON robustly — find first { and last } in response
+    const cleaned = text.replace(/```json|```/g,"").trim();
+    const jsonStart = cleaned.indexOf("{");
+    const jsonEnd   = cleaned.lastIndexOf("}");
+    if(jsonStart === -1 || jsonEnd === -1) throw new Error("No JSON found in Claude response");
+    const jsonStr = cleaned.slice(jsonStart, jsonEnd + 1);
+    result = JSON.parse(jsonStr);
     showStatus("✅ Real Claude analysis complete", "ok");
 
   } catch(e) {
