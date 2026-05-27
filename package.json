@@ -1,0 +1,9 @@
+{
+  "name": "ai-stock-proxy",
+  "version": "1.0.0",
+  "description": "Vercel proxy for Alpha Vantage stock data",
+  "private": true,
+  "engines": {
+    "node": "18.x"
+  }
+}
