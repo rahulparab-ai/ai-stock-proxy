@@ -664,7 +664,7 @@ Respond ONLY with raw JSON, no markdown, no backticks:
         ? { "Content-Type": "application/json" }
         : { "Content-Type": "application/json", ...(apiKey?{"x-api-key":apiKey,"anthropic-version":"2023-06-01"}:{}) },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 1500,
         system: "You are a strict swing trading analyst. Return raw JSON only. Never force trades when criteria aren't met. Apply news filter rigorously.",
         messages: [{role:"user", content:prompt}]
@@ -910,7 +910,7 @@ async function testClaude(){
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-        model:"claude-sonnet-4-20250514",
+        model:"claude-sonnet-4-6",
         max_tokens:20,
         messages:[{role:"user",content:"Say CONNECTED"}]
       })
