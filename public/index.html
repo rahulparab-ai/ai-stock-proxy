@@ -904,29 +904,34 @@ async function testClaude(){
   const el = document.getElementById("test-result");
   const url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
   if(!url){ el.innerHTML='<span style="color:#ff4444">❌ No proxy URL entered</span>'; return; }
-  el.innerHTML='<span style="color:#f4c430">⏳ Testing Claude proxy... (takes 5-10s)</span>';
+  el.innerHTML='<span style="color:#f4c430">⏳ Testing Claude proxy... (5-10s)</span>';
   try{
     const resp = await fetch(`${url}/api/claude`,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         model:"claude-sonnet-4-20250514",
-        max_tokens:50,
-        messages:[{role:"user",content:"Reply with just the word CONNECTED"}]
+        max_tokens:20,
+        messages:[{role:"user",content:"Say CONNECTED"}]
       })
     });
-    console.log("[Test] Claude proxy status:", resp.status);
-    const json = await resp.json();
-    console.log("[Test] Claude proxy response:", JSON.stringify(json).slice(0,200));
+    // Show raw response so we can debug exactly what's coming back
+    const rawText = await resp.text();
+    console.log("[Test] Status:", resp.status, "Body:", rawText);
+    let json;
+    try{ json = JSON.parse(rawText); } catch(_){ 
+      el.innerHTML=`<span style="color:#ff4444">❌ Non-JSON response (status ${resp.status}):<br>${rawText.slice(0,300)}</span>`;
+      return;
+    }
     if(json.content?.[0]?.text){
-      el.innerHTML=`<span style="color:#00e5a0">✅ CLAUDE PROXY WORKING<br>Response: "${json.content[0].text}"<br>You should now see usage on console.anthropic.com</span>`;
-    } else if(json.error){
-      el.innerHTML=`<span style="color:#ff4444">❌ Claude returned error: ${json.error.message}<br>Check ANTHROPIC_API_KEY in Vercel env vars.</span>`;
+      el.innerHTML=`<span style="color:#00e5a0">✅ CLAUDE WORKING! Response: "${json.content[0].text}"<br>Check console.anthropic.com — you should see usage now.</span>`;
+    } else if(json.error?.message){
+      el.innerHTML=`<span style="color:#ff4444">❌ Error: ${json.error.message}<br><br>Full response:<br>${rawText.slice(0,400)}</span>`;
     } else {
-      el.innerHTML=`<span style="color:#ff4444">❌ Unexpected response: ${JSON.stringify(json).slice(0,150)}</span>`;
+      el.innerHTML=`<span style="color:#ff4444">❌ Unexpected (status ${resp.status}):<br>${rawText.slice(0,400)}</span>`;
     }
   }catch(e){
-    el.innerHTML=`<span style="color:#ff4444">❌ Claude proxy unreachable: ${e.message}<br>Check api/claude.js exists in your GitHub repo.</span>`;
+    el.innerHTML=`<span style="color:#ff4444">❌ Fetch failed: ${e.message}</span>`;
   }
 }
 
