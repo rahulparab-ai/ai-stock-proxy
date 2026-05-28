@@ -231,39 +231,30 @@
 
   <!-- ═══ SCANNER TAB ═══ -->
   <div id="tab-scanner">
-
-    <!-- MODE SELECTOR -->
-    <div class="mode-selector">
-      <button class="mode-btn active-dip" id="mode-dip" onclick="setMode('dip')" ontouchstart="setMode('dip')">
-        <div class="mode-icon" style="font-size:18px;margin-bottom:4px">&#x1F4C9;</div>
-        DIP &amp; BOUNCE
-      </button>
-      <button class="mode-btn" id="mode-gap" onclick="setMode('gap')" ontouchstart="setMode('gap')">
-        <div class="mode-icon" style="font-size:18px;margin-bottom:4px">&#x1F680;</div>
-        GAP UP
-      </button>
-      <button class="mode-btn" id="mode-both" onclick="setMode('both')" ontouchstart="setMode('both')">
-        <div class="mode-icon" style="font-size:18px;margin-bottom:4px">&#x26A1;</div>
-        BOTH
-      </button>
+    <div style="display:table;width:100%;border-spacing:6px;margin-bottom:8px;">
+      <div style="display:table-row;">
+        <div style="display:table-cell;width:33%;padding:3px;">
+          <button id="mode-dip" onclick="setMode('dip')" style="width:100%;background:#0a1a2e;border:2px solid #2d6aff;border-radius:8px;padding:14px 4px;color:#5b8fff;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">DIP &amp; BOUNCE</button>
+        </div>
+        <div style="display:table-cell;width:33%;padding:3px;">
+          <button id="mode-gap" onclick="setMode('gap')" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">GAP UP</button>
+        </div>
+        <div style="display:table-cell;width:33%;padding:3px;">
+          <button id="mode-both" onclick="setMode('both')" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">BOTH</button>
+        </div>
+      </div>
     </div>
-
-    <!-- MODE HINT -->
-    <div id="mode-hint" style="font-size:10px;color:#2a3045;margin-bottom:10px;text-align:center;letter-spacing:1px;">
-      Finds stocks that dipped and will bounce back
-    </div>
-
+    <div id="mode-hint" style="font-size:10px;color:#2a3045;margin-bottom:10px;text-align:center;letter-spacing:1px;">Dip and Bounce — use any time during market hours</div>
     <button class="btn-scan" id="scan-btn" onclick="runScan()">SCAN NOW</button>
-    <button class="btn-notif" id="notif-btn" onclick="toggleNotif()">🔕 ENABLE HOURLY REMINDER</button>
+    <button class="btn-notif" id="notif-btn" onclick="toggleNotif()">ENABLE HOURLY REMINDER</button>
     <div class="status-bar" id="fetch-status" style="display:none"></div>
     <div id="scanner-content">
       <div class="idle">
-        <div class="icon">🔍</div>
-        <p>Select a mode above then press SCAN NOW.<br><br>GAP UP: best used at 9:31am market open.<br>DIP & BOUNCE: use any time during market hours.</p>
+        <div class="icon">( )</div>
+        <p>Select a mode above then press SCAN NOW.<br><br>GAP UP: best at 9:31am open.<br>DIP and BOUNCE: any time during market hours.</p>
       </div>
     </div>
   </div>
-
   <!-- ═══ WATCHLIST TAB ═══ -->
   <div id="tab-watchlist" style="display:none">
     <div class="add-row">
@@ -574,22 +565,22 @@ async function toggleNotif(){
 function setMode(mode){
   scanMode = mode;
   localStorage.setItem("scanMode", mode);
-  document.getElementById("mode-dip").className  = "mode-btn" + (mode==="dip" ?" active-dip":"");
-  document.getElementById("mode-gap").className  = "mode-btn" + (mode==="gap" ?" active-gap":"");
-  document.getElementById("mode-both").className = "mode-btn" + (mode==="both"?" active-both":"");
-  const hints = {
-    dip:  "Finds stocks that dipped and will bounce — use any time",
-    gap:  "Finds stocks gapping up at open — best at 9:31am",
-    both: "Runs both strategies — full market picture"
-  };
-  document.getElementById("mode-hint").textContent = hints[mode]||"";
-  // Update scan button color
-  const btn = document.getElementById("scan-btn");
-  if(mode==="gap")       btn.style.background = "linear-gradient(135deg,#7c3aed,#5b21b6)";
-  else if(mode==="both") btn.style.background = "linear-gradient(135deg,#059669,#047857)";
-  else                   btn.style.background = "linear-gradient(135deg,#2d6aff,#1a45cc)";
-  // Clear previous results
-  document.getElementById("scanner-content").innerHTML = '<div class="idle"><div class="icon">'+(mode==="gap"?"🚀":mode==="both"?"⚡":"🔍")+'</div><p>Press SCAN NOW to run '+(mode==="both"?"both scanners":mode==="gap"?"Gap Up scanner":"Dip & Bounce scanner")+'.</p></div>';
+  var dipBtn  = document.getElementById("mode-dip");
+  var gapBtn  = document.getElementById("mode-gap");
+  var bothBtn = document.getElementById("mode-both");
+  if(!dipBtn || !gapBtn || !bothBtn) return;
+  dipBtn.style.background="#0c0e16"; dipBtn.style.border="1px solid #333"; dipBtn.style.color="#555";
+  gapBtn.style.background="#0c0e16"; gapBtn.style.border="1px solid #333"; gapBtn.style.color="#555";
+  bothBtn.style.background="#0c0e16"; bothBtn.style.border="1px solid #333"; bothBtn.style.color="#555";
+  if(mode==="dip"){  dipBtn.style.background="#0a1a2e";  dipBtn.style.border="2px solid #2d6aff";  dipBtn.style.color="#5b8fff"; }
+  if(mode==="gap"){  gapBtn.style.background="#1a0a20";  gapBtn.style.border="2px solid #a855f7";  gapBtn.style.color="#c084fc"; }
+  if(mode==="both"){ bothBtn.style.background="#0a1a10"; bothBtn.style.border="2px solid #00e5a0"; bothBtn.style.color="#00e5a0"; }
+  var hintEl = document.getElementById("mode-hint");
+  if(hintEl) hintEl.textContent = mode==="gap"?"Gap Up — best at 9:31am open":mode==="both"?"Both strategies — full picture":"Dip and Bounce — use any time";
+  var scanBtn = document.getElementById("scan-btn");
+  if(scanBtn) scanBtn.style.background = mode==="gap"?"linear-gradient(135deg,#7c3aed,#5b21b6)":mode==="both"?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#2d6aff,#1a45cc)";
+  var sc = document.getElementById("scanner-content");
+  if(sc) sc.innerHTML = '<div class="idle"><p>Mode: '+mode.toUpperCase()+'<br>Press SCAN NOW.</p></div>';
 }
 
 // ══════════════════════════════════════════════════════
