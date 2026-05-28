@@ -378,9 +378,9 @@
 
 </div>
 <script>
-// ══════════════════════════════════════════════════════
+//
 // STATE
-// ══════════════════════════════════════════════════════
+//
 const DEFAULT_WATCHLIST = [
   // Semiconductors & Chips
   "NVDA","AMD","INTC","AVGO","QCOM","MRVL","ARM","MU",
@@ -419,7 +419,7 @@ let notifTimer = null;
 let scanning   = false;
 let currentTrades = []; // trades from last scan, for quick-log
 
-// ── today's P&L ──────────────────────────────────────
+// today's P&L 
 function todayKey(){ return new Date().toISOString().split("T")[0]; }
 function todayPnL(){
   return journal.filter(e=>e.date===todayKey()).reduce((s,e)=>s+e.pnl,0);
@@ -431,9 +431,9 @@ function checkRiskGuard(){
   }
 }
 
-// ══════════════════════════════════════════════════════
+//
 // INIT
-// ══════════════════════════════════════════════════════
+//
 window.onload = function(){
   try{ renderWatchlist(); }  catch(e){ console.error("renderWatchlist failed:",e); }
   try{ updateHeader(); }     catch(e){ console.error("updateHeader failed:",e); }
@@ -454,9 +454,9 @@ window.onload = function(){
   } catch(e){ console.error("settings restore failed:",e); }
 };
 
-// ══════════════════════════════════════════════════════
+//
 // TABS
-// ══════════════════════════════════════════════════════
+//
 function showTab(name){
   ["scanner","watchlist","journal","setup"].forEach(t=>{
     document.getElementById("tab-"+t).style.display=t===name?"block":"none";
@@ -466,12 +466,12 @@ function showTab(name){
   });
 }
 
-// ══════════════════════════════════════════════════════
+//
 // HEADER + P&L BAR
-// ══════════════════════════════════════════════════════
+//
 function updateHeader(){
   document.getElementById("hdr-sub").textContent=
-    watchlist.length + " stocks · Manual scan · $" + dailyGoal + "/day target";
+    watchlist.length + " stocks  Manual scan  $" + dailyGoal + "/day target";
   document.getElementById("wl-sub").textContent=
     watchlist.length + " stocks tracked";
 }
@@ -481,24 +481,24 @@ function updatePnLBar(){
   const toGo  = Math.max(0, dailyGoal - pnl);
   const wins  = journal.filter(e=>e.pnl>0).length;
   const total = journal.length;
-  const wr    = total>0 ? Math.round((wins/total)*100)+"%" : "—";
+  const wr    = total>0 ? Math.round((wins/total)*100)+"%" : "--";
 
   const pnlEl = document.getElementById("pnl-today");
   pnlEl.textContent = (pnl>=0?"$":"-$")+Math.abs(pnl).toFixed(0);
   pnlEl.style.color = pnl>0?"#00e5a0":pnl<0?"#ff4444":"#dde3ee";
 
-  document.getElementById("pnl-to-goal").textContent = pnl>=dailyGoal ? "✅ DONE!" : "$"+toGo.toFixed(0);
+  document.getElementById("pnl-to-goal").textContent = pnl>=dailyGoal ? "DONE!" : "$"+toGo.toFixed(0);
   document.getElementById("pnl-to-goal").style.color = pnl>=dailyGoal ? "#00e5a0" : "#f4c430";
   document.getElementById("pnl-winrate").textContent = wr;
   document.getElementById("pnl-trades").textContent  = journal.filter(e=>e.date===todayKey()).length;
 }
 
-// ══════════════════════════════════════════════════════
+//
 // WATCHLIST
-// ══════════════════════════════════════════════════════
+//
 function renderWatchlist(){
   document.getElementById("ticker-grid").innerHTML=
-    watchlist.map(t=>"<div class='ticker-chip'><span class='ticker-name'>" + t + "</span><button class='ticker-rm' onclick='removeTicker(\"" + t + "\")'>×</button></div>").join("");
+    watchlist.map(t=>"<div class='ticker-chip'><span class='ticker-name'>" + t + "</span><button class='ticker-rm' onclick='removeTicker(\"" + t + "\")'></button></div>").join("");
   updateHeader();
 }
 function addTicker(){
@@ -517,9 +517,9 @@ function removeTicker(t){
   renderWatchlist();
 }
 
-// ══════════════════════════════════════════════════════
+//
 // SETTINGS
-// ══════════════════════════════════════════════════════
+//
 function saveSettings(){
   apiKey    = document.getElementById("api-key-input").value.trim();
   proxyUrl  = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
@@ -535,16 +535,16 @@ function saveSettings(){
   if(proxyUrl) document.getElementById("proxy-url-input").className="setup-input has-val";
   updateHeader();
   updatePnLBar();
-  alert("✅ Settings saved!");
+  alert(" Settings saved!");
 }
 
-// ══════════════════════════════════════════════════════
+//
 // NOTIFICATIONS
-// ══════════════════════════════════════════════════════
+//
 async function toggleNotif(){
   if(notifOn){
     clearInterval(notifTimer); notifOn=false;
-    document.getElementById("notif-btn").textContent="🔕 ENABLE HOURLY REMINDER";
+    document.getElementById("notif-btn").textContent=" ENABLE HOURLY REMINDER";
     document.getElementById("notif-btn").className="btn-notif";
     return;
   }
@@ -552,18 +552,18 @@ async function toggleNotif(){
   const p=await Notification.requestPermission();
   if(p!=="granted") return alert("Please allow notifications.");
   notifOn=true;
-  document.getElementById("notif-btn").textContent="🔔 HOURLY REMINDER ON — TAP TO STOP";
+  document.getElementById("notif-btn").textContent=" HOURLY REMINDER ON - TAP TO STOP";
   document.getElementById("notif-btn").className="btn-notif on";
   notifTimer=setInterval(function(){
-    new Notification("📈 AI Stock Scanner",{
+    new Notification(" AI Stock Scanner",{
       body:"It's been an hour! Tap to scan for swing setups.",
     });
   },60*60*1000);
 }
 
-// ══════════════════════════════════════════════════════
+//
 // MODE SELECTOR
-// ══════════════════════════════════════════════════════
+//
 function setMode(mode){
   scanMode = mode;
   localStorage.setItem("scanMode", mode);
@@ -578,16 +578,16 @@ function setMode(mode){
   if(mode==="gap"){  gapBtn.style.background="#1a0a20";  gapBtn.style.border="2px solid #a855f7";  gapBtn.style.color="#c084fc"; }
   if(mode==="both"){ bothBtn.style.background="#0a1a10"; bothBtn.style.border="2px solid #00e5a0"; bothBtn.style.color="#00e5a0"; }
   var hintEl = document.getElementById("mode-hint");
-  if(hintEl) hintEl.textContent = mode==="gap"?"Gap Up — best at 9:31am open":mode==="both"?"Both strategies — full picture":"Dip and Bounce — use any time";
+  if(hintEl) hintEl.textContent = mode==="gap"?"Gap Up - best at 9:31am open":mode==="both"?"Both strategies - full picture":"Dip and Bounce - use any time";
   var scanBtn = document.getElementById("scan-btn");
   if(scanBtn) scanBtn.style.background = mode==="gap"?"linear-gradient(135deg,#7c3aed,#5b21b6)":mode==="both"?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#2d6aff,#1a45cc)";
   var sc = document.getElementById("scanner-content");
   if(sc) sc.innerHTML = '<div class="idle"><p>Mode: '+mode.toUpperCase()+'<br>Press SCAN NOW.</p></div>';
 }
 
-// ══════════════════════════════════════════════════════
+//
 // SIMULATED DATA (fallback)
-// ══════════════════════════════════════════════════════
+//
 function simulateStock(ticker){
   const seed=ticker.split("").reduce((a,c)=>a+c.charCodeAt(0),0);
   const rng=n=>((seed*9301+49297*n)%233280)/233280;
@@ -611,9 +611,9 @@ function simulateStock(ticker){
 }
 const fmtM=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n?.toLocaleString();
 
-// ══════════════════════════════════════════════════════
+//
 // POSITION SIZE CALCULATOR
-// ══════════════════════════════════════════════════════
+//
 function calcPosition(curr, target, stop){
   // How many shares needed to make $dailyGoal on this one trade
   const gainPerShare = parseFloat(target) - parseFloat(curr);
@@ -629,9 +629,9 @@ function calcPosition(curr, target, stop){
   return {shares, totalCost, expectedProfit, maxRisk, rr};
 }
 
-// ══════════════════════════════════════════════════════
+//
 // MAIN SCAN
-// ══════════════════════════════════════════════════════
+//
 async function runScan(){
   if(scanning||watchlist.length===0) return;
   if(todayPnL()<=-Math.abs(maxLoss)){
@@ -639,19 +639,19 @@ async function runScan(){
   }
   scanning=true;
   const btn=document.getElementById("scan-btn");
-  btn.disabled=true; btn.textContent="⏳ SCANNING...";
+  btn.disabled=true; btn.textContent=" SCANNING...";
   showStatus("","");
   const spinColor = scanMode==="gap"?"#a855f7":scanMode==="both"?"#00e5a0":"#2d6aff";
   const modeLabel = scanMode==="gap"?"GAP UP SCANNER":scanMode==="both"?"DIP + GAP SCANNER":"DIP & BOUNCE SCANNER";
   document.getElementById("scanner-content").innerHTML =
     '<div class="loading">' +
     '<div class="spinner" style="border-top-color:' + spinColor + '"></div>' +
-    '<p style="color:' + spinColor + ';font-size:11px;letter-spacing:2px">' + modeLabel + ' — ' + watchlist.length + ' STOCKS</p>' +
-    '<p style="color:#2a3045;font-size:10px;margin-top:6px">Fetching real prices · Sending to Claude · Analyzing setups</p>' +
+    '<p style="color:' + spinColor + ';font-size:11px;letter-spacing:2px">' + modeLabel + ' - ' + watchlist.length + ' STOCKS</p>' +
+    '<p style="color:#2a3045;font-size:10px;margin-top:6px">Fetching real prices  Sending to Claude  Analyzing setups</p>' +
     '<div class="loadbar"><div class="loadbar-inner" style="background:linear-gradient(90deg,' + spinColor + ',#00e5a0)"></div></div>' +
     '</div>';
 
-  // 1. Stock data — fetch for all modes
+  // 1. Stock data - fetch for all modes
   const data={};
   if(proxyUrl){
     showStatus("Fetching real prices from Polygon/Massive...","");
@@ -661,22 +661,22 @@ async function runScan(){
       (json.stocks||[]).forEach(s=>{if(!s.error)data[s.ticker]=s;});
       const failed=(json.stocks||[]).filter(s=>s.error).map(s=>s.ticker);
       showStatus(
-        failed.length?"⚠ Real data loaded. Missing: " + failed.join(", "):"✅ Real prices loaded for " + Object.keys(data).length + " stocks",
+        failed.length?"WARNING Real data loaded. Missing: " + failed.join(", "):"Real prices loaded for " + Object.keys(data).length + " stocks",
         failed.length?"warn":"ok"
       );
       watchlist.forEach(t=>{if(!data[t])data[t]=simulateStock(t);});
     }catch(e){
-      showStatus("⚠ Proxy unreachable — using demo data","warn");
+      showStatus("Proxy unreachable - using demo data","warn");
       watchlist.forEach(t=>{data[t]=simulateStock(t);});
     }
   }else{
-    showStatus("ℹ Demo mode — add Vercel Proxy URL in Setup for real prices","");
+    showStatus(" Demo mode - add Vercel Proxy URL in Setup for real prices","");
     watchlist.forEach(t=>{data[t]=simulateStock(t);});
   }
 
   // 2. Build prompt with news filter + position sizing request
   const pnlToday=todayPnL();
-  // Only send stocks with meaningful data to Claude — reduces token usage
+  // Only send stocks with meaningful data to Claude - reduces token usage
   const allStocks = Object.values(data);
   const movers = allStocks.filter(s => Math.abs(s.dipPct) >= 0.5 || s.rsi < 50);
   const flatStocks = allStocks.filter(s => Math.abs(s.dipPct) < 0.5 && (!s.rsi || s.rsi >= 50));
@@ -684,8 +684,8 @@ async function runScan(){
   const flatList = flatStocks.map(s=>s.ticker).join(", ");
 
   // Send to Claude:
-  // Priority 1 — all stocks dipping >=1.5% (these MUST be checked regardless)
-  // Priority 2 — stocks dipping 0.8-1.5% with RSI data (WATCHING candidates)
+  // Priority 1 - all stocks dipping >=1.5% (these MUST be checked regardless)
+  // Priority 2 - stocks dipping 0.8-1.5% with RSI data (WATCHING candidates)
   // Cap total at 30 to keep response manageable
   const mustCheck   = movers.filter(s => Math.abs(s.dipPct||0) >= 1.5);
   const maybeWatch  = movers.filter(s => Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
@@ -696,7 +696,7 @@ async function runScan(){
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
 
-  // Build exclusion report — why each dipping stock was or wasn't sent to Claude
+  // Build exclusion report - why each dipping stock was or wasn't sent to Claude
   const exclusionReport = movers
     .filter(s => Math.abs(s.dipPct||0) >= 1.0)
     .map(s => {
@@ -741,21 +741,21 @@ async function runScan(){
     "  ]",
     "}",
     "",
-    "Keep trades array SHORT — max 8 entries. Only include BUY and WATCHING tiers.",
+    "Keep trades array SHORT - max 8 entries. Only include BUY and WATCHING tiers.",
     "Raw JSON only. No markdown. No explanation."
   ];
   const prompt = promptParts.join("\n");
 
-  let result = {verdict:"NO TRADES TODAY — STAY CASH", summary:"Gap Up mode — no dip analysis run.", trades:[], marketMood:"", tomorrowWatch:""};
+  let result = {verdict:"NO TRADES TODAY - STAY CASH", summary:"Gap Up mode - no dip analysis run.", trades:[], marketMood:"", tomorrowWatch:""};
   let claudeError = null;
 
   // Only run dip analysis if not in gap-only mode
   if(scanMode !== "gap"){
-  // ── DEBUG: confirm what URL we are hitting ──────────────
+  // DEBUG: confirm what URL we are hitting 
   const claudeUrl = proxyUrl
     ? proxyUrl + "/api/claude"
     : "https://api.anthropic.com/v1/messages";
-  showStatus("🤖 Calling Claude via: " + claudeUrl, "");
+  showStatus("Calling Claude via: " + claudeUrl, "");
   console.log("[Scanner] Claude URL:", claudeUrl);
   console.log("[Scanner] proxyUrl value:", proxyUrl);
 
@@ -781,33 +781,33 @@ async function runScan(){
     const text = (raw.content||[]).map(c=>c.text||"").join("");
     if(!text) throw new Error("Empty response from Claude");
 
-    // Extract JSON robustly — find first { and last } in response
+    // Extract JSON robustly - find first { and last } in response
     const cleaned = text.replace(/```json|```/g,"").trim();
     const jsonStart = cleaned.indexOf("{");
     const jsonEnd   = cleaned.lastIndexOf("}");
     if(jsonStart === -1 || jsonEnd === -1) throw new Error("No JSON found in Claude response");
     const jsonStr = cleaned.slice(jsonStart, jsonEnd + 1);
     result = JSON.parse(jsonStr);
-    showStatus("✅ Real Claude analysis complete", "ok");
+    showStatus("Claude analysis complete", "ok");
 
   } catch(e) {
     claudeError = e.message;
     console.error("[Scanner] Claude FAILED:", e.message);
-    showStatus("❌ Claude error: " + e.message + " — showing demo data", "warn");
+    showStatus("Claude error: " + e.message + " - showing demo data", "warn");
 
-    // Demo fallback — clearly labelled
+    // Demo fallback - clearly labelled
     const q=Object.values(data).filter(s=>Math.abs(s.dipPct)>=1.5&&s.rsi<40&&s.volRatio>=1.2&&s.distFromLow>10);
     result=q.length===0
-      ?{verdict:"⚠ DEMO — NO TRADES (Claude offline)",summary:"Claude call failed: " + e.message + ". Fix in Setup tab then rescan.",trades:[]}
-      :{verdict:"⚠ DEMO DATA — Claude offline",summary:"Claude call failed: " + e.message + ". Results below are simulated, NOT real analysis.",
+      ?{verdict:" DEMO - NO TRADES (Claude offline)",summary:"Claude call failed: " + e.message + ". Fix in Setup tab then rescan.",trades:[]}
+      :{verdict:" DEMO DATA - Claude offline",summary:"Claude call failed: " + e.message + ". Results below are simulated, NOT real analysis.",
         trades:q.slice(0,3).map(function(s,i){ return {
           ticker:s.ticker,score:88-i*9,action:"BUY DIP",
           entryPrice:s.curr,
           targetPrice:parseFloat((s.curr+s.dipDollars*0.75).toFixed(2)),
           stopLoss:parseFloat((s.curr-s.dipDollars*0.4).toFixed(2)),
           holdDays:"1-2",
-          reason:"⚠ DEMO: RSI " + s.rsi + " oversold, " + s.volRatio + "x avg volume. Claude offline — do not trade on this.",
-          newsFlag:"⚠ DEMO — not real analysis",
+          reason:" DEMO: RSI " + s.rsi + " oversold, " + s.volRatio + "x avg volume. Claude offline - do not trade on this.",
+          newsFlag:" DEMO - not real analysis",
           newsSummary:"Claude API not connected. See Setup tab.",
           riskLevel:s.rsi<28?"Low":"Medium"
         };})};
@@ -815,7 +815,7 @@ async function runScan(){
 
   } // end if(scanMode !== gap)
 
-  // ── BRANCH BY MODE ─────────────────────────────────────
+  // BRANCH BY MODE 
   const container = document.getElementById("scanner-content");
   container.innerHTML = "";
 
@@ -826,41 +826,41 @@ async function runScan(){
       renderResult(result, data);
     } catch(renderErr) {
       console.error("[Render] Dip error:", renderErr);
-      container.innerHTML += '<div style="background:#0c0e16;border:1px solid #f4c43033;border-radius:8px;padding:14px;margin-bottom:12px;"><div style="color:#f4c430;font-size:11px;margin-bottom:8px">⚠ Display issue — Claude returned: ' + (result.verdict||"unknown") + '</div><div style="color:#4a5568;font-size:11px">' + (result.summary||"") + '</div><button class="btn-sm" style="margin-top:10px" onclick="runScan()">↻ TRY AGAIN</button></div>';
+      container.innerHTML += '<div style="background:#0c0e16;border:1px solid #f4c43033;border-radius:8px;padding:14px;margin-bottom:12px;"><div style="color:#f4c430;font-size:11px;margin-bottom:8px"> Display issue - Claude returned: ' + (result.verdict||"unknown") + '</div><div style="color:#4a5568;font-size:11px">' + (result.summary||"") + '</div><button class="btn-sm" style="margin-top:10px" onclick="runScan()"> TRY AGAIN</button></div>';
     }
   }
 
   if(scanMode === "gap" || scanMode === "both"){
-    showStatus("🚀 Running Gap Up analysis...", "");
+    showStatus("Running Gap Up analysis...", "");
     try {
       const gapResult = await runGapAnalysis(data);
       renderGapResult(gapResult, data, container);
-      showStatus("✅ Gap Up analysis complete", "ok");
+      showStatus("Gap Up analysis complete", "ok");
     } catch(gapErr) {
       console.error("[Gap] Error:", gapErr);
-      container.innerHTML += '<div style="background:#100818;border:1px solid #a855f733;border-radius:8px;padding:14px;"><div style="color:#c084fc;font-size:11px">🚀 Gap Up scanner error: ' + gapErr.message + '</div></div>';
+      container.innerHTML += '<div style="background:#100818;border:1px solid #a855f733;border-radius:8px;padding:14px;"><div style="color:#c084fc;font-size:11px"> Gap Up scanner error: ' + gapErr.message + '</div></div>';
     }
   }
 
   scanning=false;
   btn.disabled=false;
   const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", both:"SCAN BOTH"};
-  btn.textContent = btnLabels[scanMode]||"▶ SCAN NOW";
+  btn.textContent = btnLabels[scanMode]||" SCAN NOW";
 }
 
-// ══════════════════════════════════════════════════════
+//
 // GAP UP ANALYSIS
-// ══════════════════════════════════════════════════════
+//
 async function runGapAnalysis(data) {
-  // ── TIME-AWARE LOGIC ─────────────────────────────────
+  // TIME-AWARE LOGIC 
   const now       = new Date();
   const hour      = now.getHours();
   const min       = now.getMinutes();
-  const isEarly   = (hour < 10) || (hour === 9 && min >= 30); // 9:30am–10:00am
+  const isEarly   = (hour < 10) || (hour === 9 && min >= 30); // 9:30am-10:00am
   const timeMode  = isEarly ? "OPEN" : "MIDDAY";
   const timeLabel = isEarly
-    ? "Market just opened — looking for fresh gap-up momentum"
-    : "Midday scan — looking for stocks with $15+ remaining upside from current price";
+    ? "Market just opened - looking for fresh gap-up momentum"
+    : "Midday scan - looking for stocks with $15+ remaining upside from current price";
 
   // Early mode: filter by gap from yesterday
   // Midday mode: any stock that is up today and has RSI momentum
@@ -880,7 +880,7 @@ async function runGapAnalysis(data) {
       verdict: "NO MOMENTUM SETUPS TODAY",
       summary: timeMode==="MIDDAY"
         ? "No stocks showing enough upside momentum from current prices. Market may be extended or flat."
-        : "No stocks gapping up at open. Market opened flat — check Dip & Bounce scanner instead.",
+        : "No stocks gapping up at open. Market opened flat - check Dip & Bounce scanner instead.",
       timeMode,
       setups: []
     };
@@ -891,7 +891,7 @@ async function runGapAnalysis(data) {
     return s.ticker + ": NOW $" + s.curr + " prev $" + s.prev + " up=" + gap + "% vol=" + s.volRatio + "x RSI=" + (s.rsi||"N/A");
   }).join(", ");
 
-  // ── PROMPT CHANGES BASED ON TIME ─────────────────────
+  // PROMPT CHANGES BASED ON TIME 
   const criteria = isEarly ? [
     "1. Gapped up at least 1.5% from yesterday close",
     "2. Volume at least 1.5x average (institutional buying at open)",
@@ -902,19 +902,19 @@ async function runGapAnalysis(data) {
   ] : [
     "1. Currently trading above yesterday close by at least 0.5%",
     "2. RSI between 45-68 (still has momentum, not overbought)",
-    "3. Volume still above average — buying pressure continuing",
+    "3. Volume still above average - buying pressure continuing",
     "4. Realistic $15+ MORE upside from CURRENT price RIGHT NOW",
-    "5. Not already over-extended — room to run further",
+    "5. Not already over-extended - room to run further",
     "6. Confidence 85 or higher to include",
-    "IMPORTANT: entryPrice must be the CURRENT price. targetPrice = current + realistic gain. Ignore the gap from yesterday — only care about upside from NOW."
+    "IMPORTANT: entryPrice must be the CURRENT price. targetPrice = current + realistic gain. Ignore the gap from yesterday - only care about upside from NOW."
   ];
 
   const gapPromptParts = [
     "You are a momentum trader. " + timeLabel + ".",
     "Account: $" + capital + ". Daily goal: $" + dailyGoal + ".",
-    "Current time: " + now.toLocaleTimeString() + " — mode: " + timeMode,
+    "Current time: " + now.toLocaleTimeString() + " - mode: " + timeMode,
     "",
-    "STRICT CRITERIA — only flag if ALL true:",
+    "STRICT CRITERIA - only flag if ALL true:",
     ...criteria,
     "",
     "If no stock meets all criteria return empty setups array.",
@@ -923,7 +923,7 @@ async function runGapAnalysis(data) {
     "",
     "Return compact JSON only:",
     "{",
-    '  "verdict": "HIGH CONFIDENCE SETUPS FOUND" or "WEAK MOMENTUM — STAY OUT" or "NO MOMENTUM SETUPS TODAY",',
+    '  "verdict": "HIGH CONFIDENCE SETUPS FOUND" or "WEAK MOMENTUM - STAY OUT" or "NO MOMENTUM SETUPS TODAY",',
     '  "summary": "one sentence",',
     '  "timeMode": "' + timeMode + '",',
     "  setups: [",
@@ -971,7 +971,7 @@ async function runGapAnalysis(data) {
           targetPrice: target,
           stopLoss: stop,
           expectedGain: parseFloat((target - s.curr).toFixed(2)),
-          catalyst: "Strong pre-market volume surge — likely institutional buying",
+          catalyst: "Strong pre-market volume surge - likely institutional buying",
           reason: "Gap " + gap + "% on " + s.volRatio + "x average volume. Momentum favors continuation.",
           riskLevel: "Medium"
         };
@@ -980,7 +980,7 @@ async function runGapAnalysis(data) {
   }
 }
 
-// ── RENDER GAP UP RESULTS ───────────────────────────────────────
+// RENDER GAP UP RESULTS 
 function renderGapResult(gapResult, data, container) {
   const noSetups = !gapResult.setups || gapResult.setups.length === 0;
   const verdictColor = noSetups ? "#ff4444" : "#a855f7";
@@ -988,7 +988,7 @@ function renderGapResult(gapResult, data, container) {
   const verdictBorder= noSetups ? "#ff444422" : "#a855f733";
 
   let html = '<div style="background:' + verdictBg + ';border:1px solid ' + verdictBorder + ';border-radius:10px;padding:14px;margin-bottom:14px;display:flex;gap:12px;align-items:flex-start;">';
-  html += '<div style="font-size:22px">' + (noSetups?"🚫":"🚀") + '</div>';
+  html += '<div style="font-size:22px">' + (noSetups?"":"") + '</div>';
   html += '<div>';
   html += '<div style="font-size:12px;font-weight:700;letter-spacing:1px;color:' + verdictColor + ';margin-bottom:5px">' + gapResult.verdict + '</div>';
   html += '<div style="font-size:11px;color:#4a5568;line-height:1.7">' + (gapResult.summary||"") + '</div>';
@@ -996,27 +996,27 @@ function renderGapResult(gapResult, data, container) {
 
   if(!noSetups){
     const timeModeLabel = (gapResult.timeMode==="MIDDAY")
-    ? "⏰ MIDDAY — $15+ UPSIDE FROM CURRENT PRICE"
-    : "🔔 OPEN — FRESH GAP UP MOMENTUM";
-  html += '<div class="gap-divider">🚀 ' + timeModeLabel + ' — ' + gapResult.setups.length + ' SETUP' + (gapResult.setups.length>1?'S':'') + '</div>';
+    ? " MIDDAY - $15+ UPSIDE FROM CURRENT PRICE"
+    : " OPEN - FRESH GAP UP MOMENTUM";
+  html += '<div class="gap-divider"> ' + timeModeLabel + ' - ' + gapResult.setups.length + ' SETUP' + (gapResult.setups.length>1?'S':'') + '</div>';
     gapResult.setups.forEach(function(setup, idx){
       const sd = data[setup.ticker]||{};
       const confColor = setup.confidence >= 90 ? "#00e5a0" : "#f4c430";
       const riskClass = setup.riskLevel==="Low"?"conf-high":"conf-med";
-      const shares    = setup.expectedGain > 0 ? Math.ceil(dailyGoal / setup.expectedGain) : "—";
-      const totalCost = shares !== "—" ? "$" + (shares * setup.entryPrice).toLocaleString() : "—";
-      const profit    = shares !== "—" ? "$" + (shares * setup.expectedGain).toFixed(0) : "—";
+      const shares    = setup.expectedGain > 0 ? Math.ceil(dailyGoal / setup.expectedGain) : "--";
+      const totalCost = shares !== "--" ? "$" + (shares * setup.entryPrice).toLocaleString() : "--";
+      const profit    = shares !== "--" ? "$" + (shares * setup.expectedGain).toFixed(0) : "--";
 
       html += '<div class="gap-card">';
       html += '<div class="gap-head">';
       html += '<span class="gap-ticker">' + setup.ticker + '</span>';
-      html += '<span class="gap-pill">🚀 GAP UP</span>';
+      html += '<span class="gap-pill"> GAP UP</span>';
       html += '<span class="gap-conf ' + riskClass + '">' + setup.confidence + '% CONF</span>';
       html += '<span style="font-size:9px;color:#a855f7;margin-left:auto">+' + setup.gapPct + '% GAP</span>';
       html += '</div>';
 
       // Catalyst box
-      html += '<div class="catalyst-box">⚡ CATALYST: ' + (setup.catalyst||"Strong momentum") + '</div>';
+      html += '<div class="catalyst-box"> CATALYST: ' + (setup.catalyst||"Strong momentum") + '</div>';
       html += '<div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:10px">' + setup.reason + '</div>';
 
       // Price grid
@@ -1025,29 +1025,29 @@ function renderGapResult(gapResult, data, container) {
       html += '<div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$' + setup.targetPrice + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$' + setup.stopLoss + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">GAIN/SHARE</div><div class="price-val" style="color:#00e5a0">$' + setup.expectedGain + '</div></div>';
-      html += '<div class="price-cell"><div class="price-label">VOL RATIO</div><div class="price-val" style="color:' + ((sd.volRatio||0)>=1.5?"#00e5a0":"#f4c430") + '">' + (sd.volRatio||"—") + 'x</div></div>';
-      html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:#f4c430">' + (sd.rsi||"—") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">VOL RATIO</div><div class="price-val" style="color:' + ((sd.volRatio||0)>=1.5?"#00e5a0":"#f4c430") + '">' + (sd.volRatio||"--") + 'x</div></div>';
+      html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:#f4c430">' + (sd.rsi||"--") + '</div></div>';
       html += '</div>';
 
       // Position calculator
-      if(shares !== "—"){
+      if(shares !== "--"){
         html += '<div class="pos-calc">';
-        html += '<div class="pos-calc-title">💰 POSITION SIZE — $' + dailyGoal + '/DAY TARGET</div>';
+        html += '<div class="pos-calc-title"> POSITION SIZE - $' + dailyGoal + '/DAY TARGET</div>';
         html += '<div class="pos-grid">';
         html += '<div class="pos-cell"><div class="pos-label">SHARES</div><div class="pos-val" style="color:#c084fc">' + shares + '</div></div>';
         html += '<div class="pos-cell"><div class="pos-label">TOTAL COST</div><div class="pos-val" style="color:#dde3ee">' + totalCost + '</div></div>';
         html += '<div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:#00e5a0">' + profit + '</div></div>';
-        html += '<div class="pos-cell"><div class="pos-label">' + setup.riskLevel + ' RISK</div><div class="pos-val" style="color:#f4c430">⚠ SAME DAY</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">' + setup.riskLevel + ' RISK</div><div class="pos-val" style="color:#f4c430"> SAME DAY</div></div>';
         html += '</div>';
-        html += '<div style="font-size:10px;color:#2a3045">Buy ' + shares + ' shares @ $' + setup.entryPrice + ' → target $' + setup.targetPrice + ' · Close by 3:30pm</div>';
+        html += '<div style="font-size:10px;color:#2a3045">Buy ' + shares + ' shares @ $' + setup.entryPrice + '  target $' + setup.targetPrice + '  Close by 3:30pm</div>';
         html += '</div>';
       }
-      html += '<button class="log-btn" style="border-color:#a855f733;color:#c084fc" onclick="prefillJournal('' + setup.ticker + '',' + setup.entryPrice + ',' + setup.targetPrice + ')">+ LOG THIS TRADE</button>';
+      html += "<button class='log-btn' style='border-color:#a855f733;color:#c084fc' onclick='prefillJournal(&quot;" + setup.ticker + "&quot;," + setup.entryPrice + "," + setup.targetPrice + ")'>+ LOG THIS TRADE</button>";
       html += '</div>';
     });
   }
 
-  html += '<div class="rescan"><p style="font-size:10px;color:#2a3045">Gap Up: best scanned at 9:31am sharp. Close all gap trades by 3:30pm.</p><button class="btn-sm" onclick="runScan()">↻ SCAN AGAIN</button></div>';
+  html += '<div class="rescan"><p style="font-size:10px;color:#2a3045">Gap Up: best scanned at 9:31am sharp. Close all gap trades by 3:30pm.</p><button class="btn-sm" onclick="runScan()"> SCAN AGAIN</button></div>';
   container.innerHTML += html;
 }
 
@@ -1059,173 +1059,154 @@ function prefillJournal(ticker, entry, target){
   document.getElementById("j-shares").focus();
 }
 
-// ══════════════════════════════════════════════════════
+//
 // RENDER RESULT
-// ══════════════════════════════════════════════════════
+//
 function renderResult(result,data){
-  const now      = new Date().toLocaleTimeString();
-  const pnlLeft  = Math.max(0, dailyGoal - todayPnL());
-  const allTrades     = result.trades||[];
-  const buyTrades     = allTrades.filter(t=>t.tier==="BUY"      && !(t.newsFlag||"").startsWith("SKIP"));
-  const watchTrades   = allTrades.filter(t=>t.tier==="WATCHING");
-  const radarTrades   = allTrades.filter(t=>t.tier==="ON RADAR");
-  const hasBuys       = buyTrades.length > 0;
+  var now      = new Date().toLocaleTimeString();
+  var pnlLeft  = Math.max(0, dailyGoal - todayPnL());
+  var allTrades    = result.trades||[];
+  var buyTrades    = allTrades.filter(function(t){ return t.tier==="BUY"      && !(t.newsFlag||"").startsWith("SKIP"); });
+  var watchTrades  = allTrades.filter(function(t){ return t.tier==="WATCHING"; });
+  var hasBuys      = buyTrades.length > 0;
 
-  // ── VERDICT BANNER ──────────────────────────────────
-  const verdictClass  = hasBuys ? "trade" : watchTrades.length>0 ? "" : "notrade";
-  const verdictIcon   = hasBuys ? "✅" : watchTrades.length>0 ? "👁" : "🚫";
-  const watchStyle = (!hasBuys&&watchTrades.length>0) ? 'background:#0d1020;border:1px solid #f4c43033' : '';
-  const titleStyle = (!hasBuys&&watchTrades.length>0) ? 'color:#f4c430' : '';
-  let html = '<div class="verdict ' + verdictClass + '" style="' + watchStyle + '">';
-  html += '<div class="verdict-icon">' + verdictIcon + '</div>';
+  var watchStyle = (!hasBuys&&watchTrades.length>0) ? 'background:#0d1020;border:1px solid #f4c43033' : '';
+  var titleStyle = (!hasBuys&&watchTrades.length>0) ? 'color:#f4c430' : '';
+  var html = '<div class="verdict ' + (hasBuys?"trade":watchTrades.length>0?"":"notrade") + '" style="' + watchStyle + '">';
+  html += '<div class="verdict-icon">' + (hasBuys?"OK":watchTrades.length>0?"WATCH":"NO") + '</div>';
   html += '<div>';
   html += '<div class="verdict-title" style="' + titleStyle + '">' + (result.verdict||"") + '</div>';
   html += '<div class="verdict-summary">' + (result.summary||"") + '</div>';
-  if(result.marketMood) html += '<div style="font-size:10px;color:#3a4255;margin-top:4px">🌡 ' + result.marketMood + '</div>';
-  html += '<div class="verdict-meta">Scanned ' + watchlist.length + ' stocks at ' + now + ' · Need $' + pnlLeft.toFixed(0) + ' more today</div>';
+  if(result.marketMood) html += '<div style="font-size:10px;color:#3a4255;margin-top:4px">' + result.marketMood + '</div>';
+  html += '<div class="verdict-meta">Scanned ' + watchlist.length + ' stocks at ' + now + ' - Need $' + pnlLeft.toFixed(0) + ' more today</div>';
   html += '</div></div>';
 
-  // ── TIER 1: BUY TRADES ──────────────────────────────
+  // BUY TIER
   if(hasBuys){
-    html += '<div style="font-size:9px;color:#00e5a0;letter-spacing:2px;margin:14px 0 8px">🟢 BUY NOW — ' + buyTrades.length + ' SETUP' + (buyTrades.length>1?'S':'') + '</div>';
+    html += '<div style="font-size:9px;color:#00e5a0;letter-spacing:2px;margin:14px 0 8px">BUY NOW - ' + buyTrades.length + ' SETUP' + (buyTrades.length>1?'S':'') + '</div>';
     buyTrades.forEach(function(trade,idx){
       var sd         = data[trade.ticker]||{};
-      const scoreColor = trade.score>=80?"#00e5a0":trade.score>=65?"#f4c430":"#ff6b6b";
-      const riskClass  = trade.riskLevel==="Low"?"pill-low":trade.riskLevel==="Medium"?"pill-med":"pill-hi";
-      const nf = trade.newsFlag||"";
-      const newsClass  = nf.startsWith("SAFE")?"news-safe":nf.startsWith("CAUTION")?"news-warn":"news-skip";
-      const pos        = calcPosition(trade.entryPrice, trade.targetPrice, trade.stopLoss);
-      const tradeIdx   = idx;
-      html+="
-        <div class="trade-card">
-          <div class="trade-head">
-            <div class="score-badge" style="border:2.5px solid " + (scoreColor) + ";box-shadow:0 0 10px " + (scoreColor) + "44;">
-              <span class="score-num" style="color:" + (scoreColor)>" + (trade.score) + "</span>
-              <span class="score-lbl" style="color:" + (scoreColor) + "99">SCORE</span>
-            </div>
-            <span class="trade-ticker">" + (trade.ticker) + "</span>
-            <span class="pill pill-action">" + (trade.action) + "</span>
-            <span class="pill " + (riskClass)>" + (trade.riskLevel) + " RISK</span>
-            <span style="font-size:9px;color:#2a3045;margin-left:auto">" + (trade.holdDays||"1-2") + "d</span>
-          </div>
-          <div class="trade-reason">" + (trade.reason) + "</div>
-          <div class=(newsClass)>📰 " + (trade.newsFlag) + " — " + (trade.newsSummary) + "</div>
-          <div class="price-grid">
-            <div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$" + (sd.curr||trade.entryPrice||"—") + "</div></div>
-            <div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">" + (sd.dipPct?sd.dipPct+"%":"—") + "</div></div>
-            <div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:" + ((sd.rsi||50)<35?"#00e5a0":"#f4c430")>" + (sd.rsi||"—") + "</div></div>
-            <div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$" + (trade.entryPrice||"—") + "</div></div>
-            <div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$" + (trade.targetPrice||"—") + "</div></div>
-            <div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$" + (trade.stopLoss||"—") + "</div></div>
-          </div>
-          ${pos?"
-          <div class="pos-calc">
-            <div class="pos-calc-title">💰 POSITION SIZE — $${dailyGoal}/DAY TARGET</div>
-            <div class="pos-grid">
-              <div class="pos-cell"><div class="pos-label">SHARES</div><div class="pos-val" style="color:#5b8fff">${pos.shares}</div></div>
-              <div class="pos-cell"><div class="pos-label">TOTAL COST</div><div class="pos-val" style="color:#dde3ee">$${pos.totalCost.toLocaleString()}</div></div>
-              <div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:#00e5a0">$${pos.expectedProfit}</div></div>
-              <div class="pos-cell"><div class="pos-label">MAX LOSS</div><div class="pos-val" style="color:#ff4444">$${pos.maxRisk}</div></div>
-            </div>
-            <div style="font-size:10px;color:#2a3045">R:R = 1:${pos.rr} · Buy ${pos.shares} shares @ $${trade.entryPrice} → $${trade.targetPrice}</div>
-          </div>":""}
-          <button class="log-btn" onclick="quickLog(" + (tradeIdx) + ")">+ LOG THIS TRADE</button>
-        </div>";
+      var scoreColor = trade.score>=80?"#00e5a0":trade.score>=65?"#f4c430":"#ff6b6b";
+      var riskClass  = trade.riskLevel==="Low"?"pill-low":trade.riskLevel==="Medium"?"pill-med":"pill-hi";
+      var nf         = trade.newsFlag||"";
+      var newsClass  = nf.startsWith("SAFE")?"news-safe":nf.startsWith("CAUTION")?"news-warn":"news-skip";
+      var pos        = calcPosition(trade.entryPrice, trade.targetPrice, trade.stopLoss);
+      var tradeIdx   = allTrades.indexOf(trade);
+
+      html += '<div class="trade-card">';
+      html += '<div class="trade-head">';
+      html += '<div class="score-badge" style="border:2.5px solid ' + scoreColor + ';box-shadow:0 0 10px ' + scoreColor + '44;">';
+      html += '<span class="score-num" style="color:' + scoreColor + '">' + trade.score + '</span>';
+      html += '<span class="score-lbl" style="color:' + scoreColor + '99">SCORE</span></div>';
+      html += '<span class="trade-ticker">' + (trade.ticker||"") + '</span>';
+      html += '<span class="pill pill-action">' + (trade.action||"") + '</span>';
+      html += '<span class="pill ' + riskClass + '">' + (trade.riskLevel||"") + ' RISK</span>';
+      html += '<span style="font-size:9px;color:#2a3045;margin-left:auto">' + (trade.holdDays||"1-2") + 'd</span>';
+      html += '</div>';
+      html += '<div class="trade-reason">' + (trade.reason||"") + '</div>';
+      html += '<div class="' + newsClass + '">NEWS: ' + (trade.newsFlag||"") + ' - ' + (trade.newsSummary||"") + '</div>';
+      html += '<div class="price-grid">';
+      html += '<div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$' + (sd.curr||trade.entryPrice||"--") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">' + (sd.dipPct?sd.dipPct+"%":"--") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:' + ((sd.rsi||50)<35?"#00e5a0":"#f4c430") + '">' + (sd.rsi||"--") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$' + (trade.entryPrice||"--") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$' + (trade.targetPrice||"--") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$' + (trade.stopLoss||"--") + '</div></div>';
+      html += '</div>';
+      if(pos){
+        html += '<div class="pos-calc">';
+        html += '<div class="pos-calc-title">POSITION SIZE - $' + dailyGoal + '/DAY TARGET</div>';
+        html += '<div class="pos-grid">';
+        html += '<div class="pos-cell"><div class="pos-label">SHARES</div><div class="pos-val" style="color:#5b8fff">' + pos.shares + '</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">TOTAL COST</div><div class="pos-val" style="color:#dde3ee">$' + pos.totalCost.toLocaleString() + '</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:#00e5a0">$' + pos.expectedProfit + '</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">MAX LOSS</div><div class="pos-val" style="color:#ff4444">$' + pos.maxRisk + '</div></div>';
+        html += '</div>';
+        html += '<div style="font-size:10px;color:#2a3045">R:R = 1:' + pos.rr + ' Buy ' + pos.shares + ' @ $' + trade.entryPrice + ' target $' + trade.targetPrice + '</div>';
+        html += '</div>';
+      }
+      html += '<button class="log-btn" onclick="quickLog(' + tradeIdx + ')">+ LOG THIS TRADE</button>';
+      html += '</div>';
     });
   }
 
-  // ── TIER 2: WATCHING ────────────────────────────────
+  // WATCHING TIER
   if(watchTrades.length>0){
-    html+='<div style="font-size:9px;color:#f4c430;letter-spacing:2px;margin:16px 0 8px">🟡 WATCHING — ' + watchTrades.length + ' APPROACHING SETUP' + (watchTrades.length>1?'S':'') + '</div>';
-    watchTrades.forEach(trade=>{
-      const sd=data[trade.ticker]||{};
-      html+="
-        <div style="background:#0d1008;border:1px solid #f4c43033;border-left:3px solid #f4c430;border-radius:10px;padding:14px;margin-bottom:10px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
-            <span style="font-size:17px;font-weight:800;color:#f0f4ff">" + (trade.ticker) + "</span>
-            <span class="pill" style="background:#f4c43011;color:#f4c430;border:1px solid #f4c43033">👁 WATCHING</span>
-            ${sd.curr?"<span style="font-size:11px;color:#3a4255">$${sd.curr}</span>":""}
-            ${sd.dipPct?"<span style="font-size:11px;color:#ff6b6b">${sd.dipPct}%</span>":""}
-            ${sd.rsi?"<span style="font-size:11px;color:#f4c430">RSI ${sd.rsi}</span>":""}
-          </div>
-          <div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:8px">" + (trade.reason) + "</div>
-          ${trade.triggerPrice?"
-          <div style="background:#080a12;border-radius:6px;padding:8px 12px;font-size:11px;">
-            <span style="color:#2a3045;font-size:9px;letter-spacing:1px">TRIGGER PRICE </span>
-            <span style="color:#f4c430;font-weight:800;font-size:14px">$${trade.triggerPrice}</span>
-            <span style="color:#2a3045;font-size:9px"> — set an alert at this level</span>
-          </div>`:""}
-        </div>`;
+    html += '<div style="font-size:9px;color:#f4c430;letter-spacing:2px;margin:16px 0 8px">WATCHING - ' + watchTrades.length + ' APPROACHING</div>';
+    watchTrades.forEach(function(trade){
+      var sd = data[trade.ticker]||{};
+      html += '<div style="background:#0d1008;border:1px solid #f4c43033;border-left:3px solid #f4c430;border-radius:10px;padding:14px;margin-bottom:10px;">';
+      html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">';
+      html += '<span style="font-size:17px;font-weight:800;color:#f0f4ff">' + (trade.ticker||"") + '</span>';
+      html += '<span class="pill" style="background:#f4c43011;color:#f4c430;border:1px solid #f4c43033">WATCHING</span>';
+      if(sd.curr) html += '<span style="font-size:11px;color:#3a4255">$' + sd.curr + '</span>';
+      if(sd.dipPct) html += '<span style="font-size:11px;color:#ff6b6b">' + sd.dipPct + '%</span>';
+      if(sd.rsi) html += '<span style="font-size:11px;color:#f4c430">RSI ' + sd.rsi + '</span>';
+      html += '</div>';
+      html += '<div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:8px">' + (trade.reason||"") + '</div>';
+      if(trade.triggerPrice){
+        html += '<div style="background:#080a12;border-radius:6px;padding:8px 12px;font-size:11px;">';
+        html += '<span style="color:#2a3045;font-size:9px;letter-spacing:1px">TRIGGER PRICE </span>';
+        html += '<span style="color:#f4c430;font-weight:800;font-size:14px">$' + trade.triggerPrice + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
     });
   }
 
-  // ── TIER 3: ON RADAR — built locally from flat stocks ───
-  const localRadar = Object.values(data)
-    .filter(s => Math.abs(s.dipPct||0) < 0.8 && s.curr)
-    .sort((a,b) => (b.volRatio||0) - (a.volRatio||0))
-    .slice(0, 8);
-  if(localRadar.length > 0){
-    html += '<div style="font-size:9px;color:#5b8fff;letter-spacing:2px;margin:16px 0 8px">👁 ON RADAR — ' + localRadar.length + ' FLAT TODAY</div>';
+  // ON RADAR (local)
+  var localRadar = Object.values(data).filter(function(s){ return Math.abs(s.dipPct||0)<0.8 && s.curr; }).sort(function(a,b){ return (b.volRatio||0)-(a.volRatio||0); }).slice(0,8);
+  if(localRadar.length>0){
+    html += '<div style="font-size:9px;color:#5b8fff;letter-spacing:2px;margin:16px 0 8px">ON RADAR - ' + localRadar.length + ' FLAT TODAY</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">';
     localRadar.forEach(function(s){
       html += '<div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:10px;">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
       html += '<span style="font-size:13px;font-weight:800;color:#c8d0e8">' + s.ticker + '</span>';
-      html += '<span style="font-size:10px;color:#3a4255">$' + (s.curr||"—") + '</span>';
-      html += '</div>';
-      html += '<div style="font-size:9px;color:#2a3045">RSI ' + (s.rsi||"—") + ' · Vol ' + (s.volRatio||"—") + 'x</div>';
+      html += '<span style="font-size:10px;color:#3a4255">$' + (s.curr||"--") + '</span></div>';
+      html += '<div style="font-size:9px;color:#2a3045">RSI ' + (s.rsi||"--") + ' Vol ' + (s.volRatio||"--") + 'x</div>';
       html += '</div>';
     });
     html += '</div>';
   }
 
-  // ── TOMORROW WATCH ──────────────────────────────────
+  // TOMORROW WATCH
   if(result.tomorrowWatch){
-    html+="
-      <div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:12px;margin-bottom:12px;">
-        <div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:5px">📅 TOMORROW WATCH</div>
-        <div style="font-size:11px;color:#4a5568;line-height:1.7">" + (result.tomorrowWatch) + "</div>
-      </div>";
+    html += '<div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:12px;margin-bottom:12px;">';
+    html += '<div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:5px">TOMORROW WATCH</div>';
+    html += '<div style="font-size:11px;color:#4a5568;line-height:1.7">' + result.tomorrowWatch + '</div>';
+    html += '</div>';
   }
 
-  // ── SCAN TRANSPARENCY — why stocks were/weren't picked ──
-  const report = window._lastExclusionReport || [];
-  if(report.length > 0){
+  // SCAN TRANSPARENCY
+  var report = window._lastExclusionReport||[];
+  if(report.length>0){
     html += '<div style="background:#080a12;border:1px solid #1a1f2e;border-radius:8px;padding:14px;margin-bottom:12px;">';
-    html += '<div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:10px">🔍 SCAN TRANSPARENCY — WHY STOCKS WERE INCLUDED OR EXCLUDED</div>';
+    html += '<div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:10px">SCAN TRANSPARENCY</div>';
     report.forEach(function(s){
-      const sentColor = s.sentToClaude ? "#00e5a0" : "#ff4444";
-      const sentText  = s.sentToClaude ? "✅ SENT TO CLAUDE" : "❌ FILTERED OUT";
+      var sentColor = s.sentToClaude?"#00e5a0":"#ff4444";
       html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #0d1020;">';
       html += '<span style="font-size:12px;font-weight:800;color:#c8d0e8;width:50px;flex-shrink:0">' + s.ticker + '</span>';
       html += '<div style="flex:1;">';
-      html += '<span style="font-size:9px;color:' + sentColor + ';letter-spacing:1px">' + sentText + '</span>';
+      html += '<span style="font-size:9px;color:' + sentColor + '">' + (s.sentToClaude?"SENT":"FILTERED") + '</span>';
       html += '<div style="font-size:10px;color:#3a4255;margin-top:3px">';
       html += 'Dip: <span style="color:' + (Math.abs(s.dipPct||0)>=1.5?"#00e5a0":"#ff4444") + '">' + (s.dipPct||0) + '%</span>';
-      html += ' &nbsp; RSI: <span style="color:' + ((s.rsi||99)<40?"#00e5a0":"#ff4444") + '">' + (s.rsi||"N/A") + '</span>';
-      html += ' &nbsp; Vol: <span style="color:' + ((s.volRatio||0)>=1.2?"#00e5a0":"#ff4444") + '">' + (s.volRatio||"N/A") + 'x</span>';
+      html += ' RSI: <span style="color:' + ((s.rsi||99)<40?"#00e5a0":"#ff4444") + '">' + (s.rsi||"N/A") + '</span>';
+      html += ' Vol: <span style="color:' + ((s.volRatio||0)>=1.2?"#00e5a0":"#ff4444") + '">' + (s.volRatio||"N/A") + 'x</span>';
       html += '</div>';
-      if(!s.sentToClaude && s.buyReasons.length > 0){
-        html += '<div style="font-size:9px;color:#ff444488;margin-top:2px">Blocked: ' + s.buyReasons.join(" · ") + '</div>';
-      }
+      if(!s.sentToClaude && s.buyReasons && s.buyReasons.length>0) html += '<div style="font-size:9px;color:#ff444488;margin-top:2px">Blocked: ' + s.buyReasons.join(" - ") + '</div>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
-  // ── RESCAN BAR ──────────────────────────────────────
-  html+="
-    <div class="rescan">
-      <p>" + (notifOn?"Hourly reminder on — you'll be notified.":"Enable hourly reminder so you never miss a setup.") + "</p>
-      <button class="btn-sm" onclick="runScan()">↻ SCAN AGAIN</button>
-    </div>";
-
-  document.getElementById("scanner-content").innerHTML=html;
+  html += '<div class="rescan"><p>' + (notifOn?"Hourly reminder on.":"Enable hourly reminder above.") + '</p><button class="btn-sm" onclick="runScan()">Scan Again</button></div>';
+  document.getElementById("scanner-content").innerHTML = html;
 }
 
-// ══════════════════════════════════════════════════════
+//
 // JOURNAL
-// ══════════════════════════════════════════════════════
+//
 function quickLog(idx){
   const trade=currentTrades[idx];
   if(!trade) return;
@@ -1273,98 +1254,90 @@ function deleteTrade(id){
 }
 
 function renderJournal(){
-  const total=journal.reduce((s,e)=>s+e.pnl,0);
-  const wins=journal.filter(e=>e.pnl>0).length;
-  const wr=journal.length>0?Math.round((wins/journal.length)*100)+"%":"—";
-  const avg=journal.length>0?"$"+(total/journal.length).toFixed(0):"—";
+  var total = journal.reduce(function(s,e){ return s+e.pnl; }, 0);
+  var wins  = journal.filter(function(e){ return e.pnl>0; }).length;
+  var wr    = journal.length>0 ? Math.round((wins/journal.length)*100)+"%" : "--";
+  var avg   = journal.length>0 ? "$"+(total/journal.length).toFixed(0) : "--";
 
-  document.getElementById("j-total").textContent=(total>=0?"$":"-$")+Math.abs(total).toFixed(0);
-  document.getElementById("j-total").style.color=total>0?"#00e5a0":total<0?"#ff4444":"#dde3ee";
-  document.getElementById("j-wr").textContent=wr;
-  document.getElementById("j-wr").style.color=wins/journal.length>=0.6?"#00e5a0":"#f4c430";
-  document.getElementById("j-avg").textContent=avg;
+  document.getElementById("j-total").textContent = (total>=0?"$":"-$")+Math.abs(total).toFixed(0);
+  document.getElementById("j-total").style.color = total>0?"#00e5a0":total<0?"#ff4444":"#dde3ee";
+  document.getElementById("j-wr").textContent = wr;
+  document.getElementById("j-wr").style.color = (wins/journal.length)>=0.6?"#00e5a0":"#f4c430";
+  document.getElementById("j-avg").textContent = avg;
 
   if(journal.length===0){
-    document.getElementById("journal-entries").innerHTML='<p style="color:#2a3045;font-size:11px;text-align:center;padding:20px">No trades logged yet. Log your first trade above!</p>';
+    document.getElementById("journal-entries").innerHTML = '<p style="color:#2a3045;font-size:11px;text-align:center;padding:20px">No trades logged yet. Log your first trade above!</p>';
     return;
   }
 
-  document.getElementById("journal-entries").innerHTML=journal.map(e=>"
-    <div class="journal-entry">
-      <div class="je-left">
-        <div class="je-ticker">" + (e.ticker) + "
-          <span style="font-size:10px;font-weight:400;color:#3a4255;margin-left:8px">" + (e.shares) + " shares</span>
-        </div>
-        <div class="je-meta">
-          Entry $" + (e.entry) + " → Exit $" + (e.exit) + " · " + (e.date) + " " + (e.time) + "<br>
-          ${e.notes?"📝 ${e.notes}":""}
-        </div>
-      </div>
-      <div class=(e.pnl>=0?"je-win":"je-loss") + " je-pnl">" + (e.pnl>=0?"+":"") + "\$" + (e.pnl.toFixed(0)) + "</div>
-      <button class="je-del" onclick="deleteTrade(" + (e.id) + ")">🗑</button>
-    </div>").join("");
+  var jhtml = "";
+  journal.forEach(function(e){
+    jhtml += '<div class="journal-entry">';
+    jhtml += '<div class="je-left">';
+    jhtml += '<div class="je-ticker">' + e.ticker + '<span style="font-size:10px;font-weight:400;color:#3a4255;margin-left:8px">' + e.shares + ' shares</span></div>';
+    jhtml += '<div class="je-meta">Entry $' + e.entry + ' Exit $' + e.exit + ' ' + (e.date||"") + ' ' + (e.time||"") + '<br>' + (e.notes?"Note: "+e.notes:"") + '</div>';
+    jhtml += '</div>';
+    jhtml += '<div class="' + (e.pnl>=0?"je-win":"je-loss") + ' je-pnl">' + (e.pnl>=0?"+":"") + "$" + e.pnl.toFixed(0) + '</div>';
+    jhtml += '<button class="je-del" onclick="deleteTrade(' + e.id + ')">X</button>';
+    jhtml += '</div>';
+  });
+  document.getElementById("journal-entries").innerHTML = jhtml;
 }
 
-// ══════════════════════════════════════════════════════
+//
 // CONNECTION TESTERS
-// ══════════════════════════════════════════════════════
+//
 async function testProxy(){
-  const el = document.getElementById("test-result");
-  const url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
-  if(!url){ el.innerHTML='<span style="color:#ff4444">❌ No proxy URL entered in field above</span>'; return; }
-  el.innerHTML='<span style="color:#f4c430">⏳ Testing Polygon proxy...</span>';
+  var el  = document.getElementById("test-result");
+  var url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
+  if(!url){ el.innerHTML='<span style="color:#ff4444">No proxy URL entered</span>'; return; }
+  el.innerHTML='<span style="color:#f4c430">Testing Polygon proxy...</span>';
   try{
-    const resp = await fetch((url) + "/api/stocks?tickers=NVDA");
-    const json = await resp.json();
-    const s = json.stocks?.[0];
+    var resp = await fetch(url+"/api/stocks?tickers=NVDA");
+    var json = await resp.json();
+    var s    = json.stocks && json.stocks[0];
     if(s && s.curr){
-      el.innerHTML="<span style="color:#00e5a0">✅ POLYGON PROXY WORKING<br>NVDA: $" + (s.curr) + " | RSI: " + (s.rsi||"pending") + " | Vol: " + ((s.vol/1e6).toFixed(1)) + "M</span>";
+      el.innerHTML='<span style="color:#00e5a0">POLYGON PROXY WORKING - NVDA: $'+s.curr+' RSI: '+(s.rsi||"--")+' Vol: '+((s.vol/1e6).toFixed(1))+'M</span>';
     } else {
-      el.innerHTML="<span style="color:#ff4444">❌ Proxy responded but no stock data. Check POLYGON_API_KEY in Vercel env vars.<br>Response: " + (JSON.stringify(json).slice(0,100)) + "</span>";
+      el.innerHTML='<span style="color:#ff4444">Proxy ok but no data. Check POLYGON_API_KEY in Vercel. Response: '+JSON.stringify(json).slice(0,100)+'</span>';
     }
   }catch(e){
-    el.innerHTML="<span style="color:#ff4444">❌ Proxy unreachable: " + (e.message) + "<br>Check your Vercel URL is correct and deployed.</span>";
+    el.innerHTML='<span style="color:#ff4444">Proxy unreachable: '+e.message+'</span>';
   }
 }
 
 async function testClaude(){
-  const el = document.getElementById("test-result");
-  const url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
-  if(!url){ el.innerHTML='<span style="color:#ff4444">❌ No proxy URL entered</span>'; return; }
-  el.innerHTML='<span style="color:#f4c430">⏳ Testing Claude proxy... (5-10s)</span>';
+  var el  = document.getElementById("test-result");
+  var url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
+  if(!url){ el.innerHTML='<span style="color:#ff4444">No proxy URL entered</span>'; return; }
+  el.innerHTML='<span style="color:#f4c430">Testing Claude proxy... (5-10s)</span>';
   try{
-    const resp = await fetch((url) + "/api/claude",{
+    var resp = await fetch(url+"/api/claude",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        model:"claude-sonnet-4-6",
-        max_tokens:20,
-        messages:[{role:"user",content:"Say CONNECTED"}]
-      })
+      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:20,messages:[{role:"user",content:"Say CONNECTED"}]})
     });
-    // Show raw response so we can debug exactly what's coming back
-    const rawText = await resp.text();
-    console.log("[Test] Status:", resp.status, "Body:", rawText);
-    let json;
-    try{ json = JSON.parse(rawText); } catch(_){ 
-      el.innerHTML="<span style="color:#ff4444">❌ Non-JSON response (status " + (resp.status) + "):<br>" + (rawText.slice(0,300)) + "</span>";
+    var rawText = await resp.text();
+    var json;
+    try{ json=JSON.parse(rawText); }catch(_){
+      el.innerHTML='<span style="color:#ff4444">Non-JSON response ('+resp.status+'): '+rawText.slice(0,200)+'</span>';
       return;
     }
-    if(json.content?.[0]?.text){
-      el.innerHTML="<span style="color:#00e5a0">✅ CLAUDE WORKING! Response: (json.content[0].text)<br>Check console.anthropic.com — you should see usage now.</span>";
-    } else if(json.error?.message){
-      el.innerHTML="<span style="color:#ff4444">❌ Error: " + (json.error.message) + "<br><br>Full response:<br>" + (rawText.slice(0,400)) + "</span>";
+    if(json.content && json.content[0] && json.content[0].text){
+      el.innerHTML='<span style="color:#00e5a0">CLAUDE WORKING! Response: "'+json.content[0].text+'"</span>';
+    } else if(json.error && json.error.message){
+      el.innerHTML='<span style="color:#ff4444">Error: '+json.error.message+'</span>';
     } else {
-      el.innerHTML="<span style="color:#ff4444">❌ Unexpected (status " + (resp.status) + "):<br>" + (rawText.slice(0,400)) + "</span>";
+      el.innerHTML='<span style="color:#ff4444">Unexpected ('+resp.status+'): '+rawText.slice(0,300)+'</span>';
     }
   }catch(e){
-    el.innerHTML="<span style="color:#ff4444">❌ Fetch failed: " + (e.message) + "</span>";
+    el.innerHTML='<span style="color:#ff4444">Fetch failed: '+e.message+'</span>';
   }
 }
 
-// ══════════════════════════════════════════════════════
+//
 // STATUS BAR
-// ══════════════════════════════════════════════════════
+//
 function showStatus(msg,type){
   const el=document.getElementById("fetch-status");
   if(!msg){el.style.display="none";return;}
