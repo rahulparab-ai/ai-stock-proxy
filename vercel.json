@@ -5,7 +5,7 @@
       "maxDuration": 30
     },
     "api/claude.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
   "headers": [
@@ -19,4 +19,3 @@
     }
   ]
 }
-
