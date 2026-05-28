@@ -163,7 +163,7 @@
 
     /* ── MODE SELECTOR ── */
     .mode-selector{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;}
-    .mode-btn{background:#0c0e16;border:1px solid #1a1f2e;border-radius:8px;padding:10px 6px;color:#3a4255;font-size:9px;letter-spacing:1px;cursor:pointer;text-align:center;transition:all 0.15s;font-family:'Courier New',monospace;}
+    .mode-btn{background:#0c0e16;border:1px solid #1a1f2e;border-radius:8px;padding:12px 6px;color:#3a4255;font-size:9px;letter-spacing:1px;cursor:pointer;text-align:center;transition:all 0.15s;font-family:'Courier New',monospace;min-height:64px;-webkit-tap-highlight-color:rgba(0,0,0,0);touch-action:manipulation;}
     .mode-btn.active-dip{background:#0a1a2e;border-color:#2d6aff;color:#5b8fff;}
     .mode-btn.active-gap{background:#1a0a20;border-color:#a855f7;color:#c084fc;}
     .mode-btn.active-both{background:#0a1a10;border-color:#00e5a0;color:#00e5a0;}
@@ -234,26 +234,26 @@
 
     <!-- MODE SELECTOR -->
     <div class="mode-selector">
-      <button class="mode-btn active-dip" id="mode-dip" onclick="setMode('dip')">
-        <div class="mode-icon">📉</div>
-        DIP & BOUNCE
+      <button class="mode-btn active-dip" id="mode-dip" onclick="setMode('dip')" ontouchstart="setMode('dip')">
+        <div class="mode-icon" style="font-size:18px;margin-bottom:4px">&#x1F4C9;</div>
+        DIP &amp; BOUNCE
       </button>
-      <button class="mode-btn" id="mode-gap" onclick="setMode('gap')">
-        <div class="mode-icon">🚀</div>
+      <button class="mode-btn" id="mode-gap" onclick="setMode('gap')" ontouchstart="setMode('gap')">
+        <div class="mode-icon" style="font-size:18px;margin-bottom:4px">&#x1F680;</div>
         GAP UP
       </button>
-      <button class="mode-btn" id="mode-both" onclick="setMode('both')">
-        <div class="mode-icon">⚡</div>
+      <button class="mode-btn" id="mode-both" onclick="setMode('both')" ontouchstart="setMode('both')">
+        <div class="mode-icon" style="font-size:18px;margin-bottom:4px">&#x26A1;</div>
         BOTH
       </button>
     </div>
 
     <!-- MODE HINT -->
     <div id="mode-hint" style="font-size:10px;color:#2a3045;margin-bottom:10px;text-align:center;letter-spacing:1px;">
-      📉 Finds stocks that dipped and will bounce back
+      Finds stocks that dipped and will bounce back
     </div>
 
-    <button class="btn-scan" id="scan-btn" onclick="runScan()">▶ SCAN NOW</button>
+    <button class="btn-scan" id="scan-btn" onclick="runScan()">SCAN NOW</button>
     <button class="btn-notif" id="notif-btn" onclick="toggleNotif()">🔕 ENABLE HOURLY REMINDER</button>
     <div class="status-bar" id="fetch-status" style="display:none"></div>
     <div id="scanner-content">
@@ -578,9 +578,9 @@ function setMode(mode){
   document.getElementById("mode-gap").className  = "mode-btn" + (mode==="gap" ?" active-gap":"");
   document.getElementById("mode-both").className = "mode-btn" + (mode==="both"?" active-both":"");
   const hints = {
-    dip:  "📉 Finds stocks that dipped and will bounce — use any time",
-    gap:  "🚀 Finds stocks gapping up at open — best at 9:31am",
-    both: "⚡ Runs both strategies — full market picture"
+    dip:  "Finds stocks that dipped and will bounce — use any time",
+    gap:  "Finds stocks gapping up at open — best at 9:31am",
+    both: "Runs both strategies — full market picture"
   };
   document.getElementById("mode-hint").textContent = hints[mode]||"";
   // Update scan button color
@@ -851,7 +851,7 @@ async function runScan(){
 
   scanning=false;
   btn.disabled=false;
-  const btnLabels = {dip:"▶ SCAN NOW", gap:"🚀 SCAN GAP UP", both:"⚡ SCAN BOTH"};
+  const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", both:"SCAN BOTH"};
   btn.textContent = btnLabels[scanMode]||"▶ SCAN NOW";
 }
 
