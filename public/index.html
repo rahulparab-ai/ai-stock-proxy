@@ -71,6 +71,7 @@
     .verdict-title{font-size:12px;font-weight:700;letter-spacing:1px;margin-bottom:5px;}
     .verdict.notrade .verdict-title{color:#ff4444;}
     .verdict.trade .verdict-title{color:#00e5a0;}
+    .verdict.watching .verdict-title{color:#f4c430;}
     .verdict-summary{font-size:11px;color:#4a5568;line-height:1.7;}
     .verdict-meta{font-size:9px;color:#2a3045;margin-top:5px;}
 
@@ -349,15 +350,28 @@
 // STATE
 // ══════════════════════════════════════════════════════
 const DEFAULT_WATCHLIST = [
+  // Semiconductors & Chips
   "NVDA","AMD","INTC","AVGO","QCOM","MRVL","ARM","MU",
+  // Semiconductor Equipment
+  "AMAT","LRCX","KLAC","TER","ONTO","ACLS",
+  // Storage & Hardware
   "WDC","STX","SMCI","DELL","HPE",
-  "AMAT","LRCX","KLAC","TER",
-  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","JNPR",
-  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","CFLT",
+  // Cloud & Infrastructure
+  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","JNPR","DOCN","NET",
+  // AI Software & Data
+  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","CFLT","HUBS","GTLB",
+  // Cybersecurity
   "CRWD","PANW","ZS","S",
-  "TSLA","PATH","ROK","SYM","ARKQ",
-  "ETN","GEV","CEG","VST",
-  "SMH","SOXX","BOTZ","CHAT"
+  // Robotics & Automation
+  "TSLA","PATH","ROK","SYM","ARKQ","ISRG",
+  // Quantum Computing
+  "IONQ","RGTI","QUBT",
+  // AI Data Centers & Power
+  "APLD","CORZ","IREN","WULF","ETN","GEV","CEG","VST",
+  // AI Applications
+  "SOUN","BBAI","AMBA",
+  // ETFs
+  "SMH","SOXX","BOTZ","CHAT","BILL"
 ];
 
 let watchlist  = JSON.parse(localStorage.getItem("watchlist")||"null") || DEFAULT_WATCHLIST;
@@ -613,36 +627,79 @@ async function runScan(){
   const prompt=`You are a professional swing trader managing a $${capital} account with a $${dailyGoal}/day profit goal.
 Today's P&L so far: $${pnlToday.toFixed(2)}. Still need: $${Math.max(0,dailyGoal-pnlToday).toFixed(2)} more to hit goal.
 
-STRICT SWING TRADE RULES — stock ONLY qualifies if ALL true:
-1. Dip at least $10 below previous close
-2. RSI below 40 (oversold — not free-falling)
-3. Volume at least 1.2x average (capitulation/reversal signal)
-4. distFromLow > 10% (has room to bounce, not in freefall)
-5. Realistic $15–$30 bounce within 1–2 days
+Classify EVERY stock in the data into one of three tiers:
 
-NEWS FILTER: For each qualifying stock, also assess if there is likely a negative fundamental catalyst (earnings miss, FDA rejection, CEO scandal, etc.) that would prevent a technical bounce. If yes, mark newsFlag as "SKIP — negative catalyst" and exclude from trades.
+TIER 1 — BUY: Stock qualifies RIGHT NOW. ALL must be true:
+- Dip at least 1.5% below previous close
+- RSI below 40 (oversold, not free-falling)
+- Volume at least 1.2x average (capitulation signal)
+- distFromLow > 10% (bounce room exists)
+- Bounce potential of at least 1.5% OR $8 whichever is greater within 1-2 days
+- No negative fundamental catalyst (earnings miss, scandal, etc.)
 
-If NO stock qualifies after all filters, return empty trades array. Do NOT force picks.
+TIER 2 — WATCHING: Getting close but not ready yet. ANY of:
+- Dip 0.8–1.5%, RSI 40–48 and falling, volume picking up
+- Dip >1.5% but RSI not yet oversold — could trigger by end of day
+- Strong setup forming, needs one more down move to qualify
+Include specific price level that would trigger full BUY signal.
 
-TODAY'S DATA:
+TIER 3 — ON RADAR: Technically strong stock worth monitoring. Either:
+- Trending well but no dip yet — note what price level to watch for entry
+- Recovering from recent dip — could set up again soon
+
+NEWS FILTER: For BUY tier only — check for negative catalysts. If found mark as SKIP.
+
+TODAY'S DATA (${watchlist.length} stocks):
 ${rows}
 
-Respond ONLY with raw JSON, no markdown, no backticks:
+Respond ONLY with raw JSON, no markdown, no backticks, start with { end with }:
 {
-  "verdict": "TRADES FOUND" | "NO TRADES TODAY — STAY CASH",
-  "summary": "1-2 sentence market summary",
+  "verdict": "TRADES FOUND" | "WATCHING SETUPS" | "NO TRADES TODAY — STAY CASH",
+  "marketMood": "1 sentence on overall AI sector mood today",
+  "summary": "1-2 sentence explanation of today's conditions",
+  "tomorrowWatch": "1 sentence on what to watch for tomorrow",
   "trades": [{
     "ticker": "NVDA",
+    "tier": "BUY",
     "score": 84,
     "action": "BUY DIP",
     "entryPrice": 450.00,
     "targetPrice": 472.00,
     "stopLoss": 441.00,
-    "holdDays": "1–2",
+    "holdDays": "1-2",
     "reason": "specific RSI/volume/level reason",
-    "newsFlag": "SAFE — dip is technical" | "CAUTION — monitor news" | "SKIP — negative catalyst",
+    "newsFlag": "SAFE — dip is technical",
     "newsSummary": "brief news context",
-    "riskLevel": "Low" | "Medium" | "High"
+    "riskLevel": "Low",
+    "triggerPrice": null
+  },{
+    "ticker": "AMD",
+    "tier": "WATCHING",
+    "score": 62,
+    "action": "WATCH",
+    "entryPrice": null,
+    "targetPrice": null,
+    "stopLoss": null,
+    "holdDays": null,
+    "reason": "RSI at 44 and falling, dip 1.1% — needs RSI below 40 to trigger",
+    "newsFlag": "SAFE — dip is technical",
+    "newsSummary": "No major catalyst",
+    "riskLevel": "Medium",
+    "triggerPrice": 118.50
+  },{
+    "ticker": "MSFT",
+    "tier": "ON RADAR",
+    "score": 45,
+    "action": "MONITOR",
+    "entryPrice": null,
+    "targetPrice": null,
+    "stopLoss": null,
+    "holdDays": null,
+    "reason": "Strong uptrend, watch for pullback to $380 support",
+    "newsFlag": "SAFE",
+    "newsSummary": "No news",
+    "riskLevel": "Low",
+    "triggerPrice": 380.00
   }]
 }`;
 
@@ -694,7 +751,7 @@ Respond ONLY with raw JSON, no markdown, no backticks:
     showStatus(`❌ Claude error: ${e.message} — showing demo data`, "warn");
 
     // Demo fallback — clearly labelled
-    const q=Object.values(data).filter(s=>s.dipDollars>=10&&s.rsi<40&&s.volRatio>=1.2&&s.distFromLow>10);
+    const q=Object.values(data).filter(s=>Math.abs(s.dipPct)>=1.5&&s.rsi<40&&s.volRatio>=1.2&&s.distFromLow>10);
     result=q.length===0
       ?{verdict:"⚠ DEMO — NO TRADES (Claude offline)",summary:`Claude call failed: ${e.message}. Fix in Setup tab then rescan.`,trades:[]}
       :{verdict:"⚠ DEMO DATA — Claude offline",summary:`Claude call failed: ${e.message}. Results below are simulated, NOT real analysis.`,
@@ -724,78 +781,132 @@ Respond ONLY with raw JSON, no markdown, no backticks:
 // RENDER RESULT
 // ══════════════════════════════════════════════════════
 function renderResult(result,data){
-  const noTrade=result.trades.length===0;
-  const now=new Date().toLocaleTimeString();
-  const pnlLeft=Math.max(0,dailyGoal-todayPnL());
+  const now      = new Date().toLocaleTimeString();
+  const pnlLeft  = Math.max(0, dailyGoal - todayPnL());
+  const buyTrades     = (result.trades||[]).filter(t=>t.tier==="BUY"     && !t.newsFlag?.startsWith("SKIP"));
+  const watchTrades   = (result.trades||[]).filter(t=>t.tier==="WATCHING");
+  const radarTrades   = (result.trades||[]).filter(t=>t.tier==="ON RADAR");
+  const hasBuys       = buyTrades.length > 0;
 
-  let html=`
-    <div class="verdict ${noTrade?"notrade":"trade"}">
-      <div class="verdict-icon">${noTrade?"🚫":"✅"}</div>
+  // ── VERDICT BANNER ──────────────────────────────────
+  const verdictClass  = hasBuys ? "trade" : watchTrades.length>0 ? "" : "notrade";
+  const verdictIcon   = hasBuys ? "✅" : watchTrades.length>0 ? "👁" : "🚫";
+  let html = `
+    <div class="verdict ${verdictClass}" style="${!hasBuys&&watchTrades.length>0?'background:#0d1020;border:1px solid #f4c43033':''}">
+      <div class="verdict-icon">${verdictIcon}</div>
       <div>
-        <div class="verdict-title">${result.verdict}</div>
+        <div class="verdict-title" style="${!hasBuys&&watchTrades.length>0?'color:#f4c430':''}">${result.verdict}</div>
         <div class="verdict-summary">${result.summary}</div>
+        ${result.marketMood?`<div style="font-size:10px;color:#3a4255;margin-top:4px">🌡 ${result.marketMood}</div>`:""}
         <div class="verdict-meta">Scanned ${watchlist.length} stocks at ${now} · Need $${pnlLeft.toFixed(0)} more today</div>
       </div>
     </div>`;
 
-  result.trades.forEach((trade,idx)=>{
-    const sd=data[trade.ticker]||{};
-    const scoreColor=trade.score>=80?"#00e5a0":trade.score>=65?"#f4c430":"#ff6b6b";
-    const riskClass=trade.riskLevel==="Low"?"pill-low":trade.riskLevel==="Medium"?"pill-med":"pill-hi";
-    const newsClass=trade.newsFlag?.startsWith("SAFE")?"news-safe":trade.newsFlag?.startsWith("CAUTION")?"news-warn":"news-skip";
+  // ── TIER 1: BUY TRADES ──────────────────────────────
+  if(hasBuys){
+    html += `<div style="font-size:9px;color:#00e5a0;letter-spacing:2px;margin:14px 0 8px">🟢 BUY NOW — ${buyTrades.length} SETUP${buyTrades.length>1?"S":""}</div>`;
+    buyTrades.forEach((trade,idx)=>{
+      const sd         = data[trade.ticker]||{};
+      const scoreColor = trade.score>=80?"#00e5a0":trade.score>=65?"#f4c430":"#ff6b6b";
+      const riskClass  = trade.riskLevel==="Low"?"pill-low":trade.riskLevel==="Medium"?"pill-med":"pill-hi";
+      const newsClass  = trade.newsFlag?.startsWith("SAFE")?"news-safe":trade.newsFlag?.startsWith("CAUTION")?"news-warn":"news-skip";
+      const pos        = calcPosition(trade.entryPrice, trade.targetPrice, trade.stopLoss);
+      const tradeIdx   = (result.trades||[]).indexOf(trade);
+      html+=`
+        <div class="trade-card">
+          <div class="trade-head">
+            <div class="score-badge" style="border:2.5px solid ${scoreColor};box-shadow:0 0 10px ${scoreColor}44;">
+              <span class="score-num" style="color:${scoreColor}">${trade.score}</span>
+              <span class="score-lbl" style="color:${scoreColor}99">SCORE</span>
+            </div>
+            <span class="trade-ticker">${trade.ticker}</span>
+            <span class="pill pill-action">${trade.action}</span>
+            <span class="pill ${riskClass}">${trade.riskLevel} RISK</span>
+            <span style="font-size:9px;color:#2a3045;margin-left:auto">${trade.holdDays||"1-2"}d</span>
+          </div>
+          <div class="trade-reason">${trade.reason}</div>
+          <div class="${newsClass}">📰 ${trade.newsFlag} — ${trade.newsSummary}</div>
+          <div class="price-grid">
+            <div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$${sd.curr||trade.entryPrice||"—"}</div></div>
+            <div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">${sd.dipPct?sd.dipPct+"%":"—"}</div></div>
+            <div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:${(sd.rsi||50)<35?"#00e5a0":"#f4c430"}">${sd.rsi||"—"}</div></div>
+            <div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$${trade.entryPrice||"—"}</div></div>
+            <div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$${trade.targetPrice||"—"}</div></div>
+            <div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$${trade.stopLoss||"—"}</div></div>
+          </div>
+          ${pos?`
+          <div class="pos-calc">
+            <div class="pos-calc-title">💰 POSITION SIZE — $${dailyGoal}/DAY TARGET</div>
+            <div class="pos-grid">
+              <div class="pos-cell"><div class="pos-label">SHARES</div><div class="pos-val" style="color:#5b8fff">${pos.shares}</div></div>
+              <div class="pos-cell"><div class="pos-label">TOTAL COST</div><div class="pos-val" style="color:#dde3ee">$${pos.totalCost.toLocaleString()}</div></div>
+              <div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:#00e5a0">$${pos.expectedProfit}</div></div>
+              <div class="pos-cell"><div class="pos-label">MAX LOSS</div><div class="pos-val" style="color:#ff4444">$${pos.maxRisk}</div></div>
+            </div>
+            <div style="font-size:10px;color:#2a3045">R:R = 1:${pos.rr} · Buy ${pos.shares} shares @ $${trade.entryPrice} → $${trade.targetPrice}</div>
+          </div>`:""}
+          <button class="log-btn" onclick="quickLog(${tradeIdx})">+ LOG THIS TRADE</button>
+        </div>`;
+    });
+  }
 
-    // Position sizing
-    const pos=calcPosition(trade.entryPrice,trade.targetPrice,trade.stopLoss);
+  // ── TIER 2: WATCHING ────────────────────────────────
+  if(watchTrades.length>0){
+    html+=`<div style="font-size:9px;color:#f4c430;letter-spacing:2px;margin:16px 0 8px">🟡 WATCHING — ${watchTrades.length} APPROACHING SETUP${watchTrades.length>1?"S":""}</div>`;
+    watchTrades.forEach(trade=>{
+      const sd=data[trade.ticker]||{};
+      html+=`
+        <div style="background:#0d1008;border:1px solid #f4c43033;border-left:3px solid #f4c430;border-radius:10px;padding:14px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+            <span style="font-size:17px;font-weight:800;color:#f0f4ff">${trade.ticker}</span>
+            <span class="pill" style="background:#f4c43011;color:#f4c430;border:1px solid #f4c43033">👁 WATCHING</span>
+            ${sd.curr?`<span style="font-size:11px;color:#3a4255">$${sd.curr}</span>`:""}
+            ${sd.dipPct?`<span style="font-size:11px;color:#ff6b6b">${sd.dipPct}%</span>`:""}
+            ${sd.rsi?`<span style="font-size:11px;color:#f4c430">RSI ${sd.rsi}</span>`:""}
+          </div>
+          <div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:8px">${trade.reason}</div>
+          ${trade.triggerPrice?`
+          <div style="background:#080a12;border-radius:6px;padding:8px 12px;font-size:11px;">
+            <span style="color:#2a3045;font-size:9px;letter-spacing:1px">TRIGGER PRICE </span>
+            <span style="color:#f4c430;font-weight:800;font-size:14px">$${trade.triggerPrice}</span>
+            <span style="color:#2a3045;font-size:9px"> — set an alert at this level</span>
+          </div>`:""}
+        </div>`;
+    });
+  }
 
+  // ── TIER 3: ON RADAR ────────────────────────────────
+  if(radarTrades.length>0){
+    html+=`<div style="font-size:9px;color:#5b8fff;letter-spacing:2px;margin:16px 0 8px">👁 ON RADAR — ${radarTrades.length} TO MONITOR</div>`;
+    html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">`;
+    radarTrades.forEach(trade=>{
+      const sd=data[trade.ticker]||{};
+      html+=`
+        <div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-size:14px;font-weight:800;color:#c8d0e8">${trade.ticker}</span>
+            ${sd.curr?`<span style="font-size:11px;color:#3a4255">$${sd.curr}</span>`:""}
+          </div>
+          <div style="font-size:10px;color:#3a4255;line-height:1.6">${trade.reason}</div>
+          ${trade.triggerPrice?`<div style="font-size:9px;color:#5b8fff;margin-top:5px">Watch $${trade.triggerPrice}</div>`:""}
+        </div>`;
+    });
+    html+=`</div>`;
+  }
+
+  // ── TOMORROW WATCH ──────────────────────────────────
+  if(result.tomorrowWatch){
     html+=`
-      <div class="trade-card">
-        <div class="trade-head">
-          <div class="score-badge" style="border:2.5px solid ${scoreColor};box-shadow:0 0 10px ${scoreColor}44;">
-            <span class="score-num" style="color:${scoreColor}">${trade.score}</span>
-            <span class="score-lbl" style="color:${scoreColor}99">SCORE</span>
-          </div>
-          <span class="trade-ticker">${trade.ticker}</span>
-          <span class="pill pill-action">${trade.action}</span>
-          <span class="pill ${riskClass}">${trade.riskLevel} RISK</span>
-          <span style="font-size:9px;color:#2a3045;margin-left:auto">${trade.holdDays}d</span>
-        </div>
-
-        <div class="trade-reason">${trade.reason}</div>
-
-        <!-- News flag -->
-        <div class="${newsClass}">📰 ${trade.newsFlag} — ${trade.newsSummary}</div>
-
-        <!-- Price levels -->
-        <div class="price-grid">
-          <div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$${sd.curr||trade.entryPrice}</div></div>
-          <div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">-$${sd.dipDollars||"—"}</div></div>
-          <div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:${(sd.rsi||50)<35?"#00e5a0":"#f4c430"}">${sd.rsi||"—"}</div></div>
-          <div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$${trade.entryPrice}</div></div>
-          <div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$${trade.targetPrice}</div></div>
-          <div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$${trade.stopLoss}</div></div>
-        </div>
-
-        <!-- Position Calculator -->
-        ${pos?`
-        <div class="pos-calc">
-          <div class="pos-calc-title">💰 POSITION CALCULATOR — $${dailyGoal}/DAY TARGET</div>
-          <div class="pos-grid">
-            <div class="pos-cell"><div class="pos-label">SHARES TO BUY</div><div class="pos-val" style="color:#5b8fff">${pos.shares}</div></div>
-            <div class="pos-cell"><div class="pos-label">TOTAL COST</div><div class="pos-val" style="color:#dde3ee">$${pos.totalCost.toLocaleString()}</div></div>
-            <div class="pos-cell"><div class="pos-label">EXPECTED PROFIT</div><div class="pos-val" style="color:#00e5a0">$${pos.expectedProfit}</div></div>
-            <div class="pos-cell"><div class="pos-label">MAX LOSS</div><div class="pos-val" style="color:#ff4444">$${pos.maxRisk}</div></div>
-          </div>
-          <div style="font-size:10px;color:#2a3045">Risk/Reward: 1:${pos.rr} · Buy ${pos.shares} shares of ${trade.ticker} at $${trade.entryPrice} → target $${trade.targetPrice}</div>
-        </div>`:""}
-
-        <!-- Quick log button -->
-        <button class="log-btn" onclick="quickLog(${idx})">+ LOG THIS TRADE TO JOURNAL</button>
+      <div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:5px">📅 TOMORROW WATCH</div>
+        <div style="font-size:11px;color:#4a5568;line-height:1.7">${result.tomorrowWatch}</div>
       </div>`;
-  });
+  }
 
+  // ── RESCAN BAR ──────────────────────────────────────
   html+=`
     <div class="rescan">
-      <p>${notifOn?"You'll get a reminder in ~1h.":"Enable hourly reminder above."}</p>
+      <p>${notifOn?"Hourly reminder on — you'll be notified.":"Enable hourly reminder so you never miss a setup."}</p>
       <button class="btn-sm" onclick="runScan()">↻ SCAN AGAIN</button>
     </div>`;
 
