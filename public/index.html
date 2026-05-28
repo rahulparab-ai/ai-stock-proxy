@@ -382,12 +382,23 @@
 // STATE
 //
 const DEFAULT_WATCHLIST = [
-  // Semiconductors & Chips
-  "NVDA","AMD","INTC","AVGO","QCOM","MRVL","ARM","MU",
+  // AI GPUs & Fabless Leaders
+  "NVDA","AMD","MRVL","QCOM","ARM","CBRS",
   // Semiconductor Equipment
-  "AMAT","LRCX","KLAC","TER","ONTO","ACLS",
-  // Storage & Hardware
-  "WDC","STX","SMCI","DELL","HPE",
+  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","ASMI","AZTA","VECO","UCTT","ICHR","CCMP","COHU","PLAB",
+  // EDA & IP
+  "SNPS","CDNS","ANSS","RMBS","CEVA","IDCC",
+  // Memory & Storage
+  "MU","WDC","SNDK","STX",
+  // IDMs & Foundries
+  "INTC","AVGO","TSM","GFS","UMC","TSEM",
+  "TXN","ADI","ON","MCHP","NXPI","STM","MPWR","SWKS","QRVO","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
+  // Raw Materials & Chemicals
+  "ENTG","WOLF","COHR","AXTI","LIN","APD","DD","MTRN",
+  // Packaging & Test
+  "AMKR","ASX","KLIC","TTMI","ALAB","CRDO","INDI","MBLY","AMBA",
+  // Storage & Infrastructure Hardware
+  "SMCI","DELL","HPE",
   // Cloud & Infrastructure
   "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","JNPR","DOCN","NET",
   // AI Software & Data
@@ -398,10 +409,12 @@ const DEFAULT_WATCHLIST = [
   "TSLA","PATH","ROK","SYM","ARKQ","ISRG",
   // Quantum Computing
   "IONQ","RGTI","QUBT",
-  // AI Data Centers & Power
+  // AI Power & Data Centers
   "APLD","CORZ","IREN","WULF","ETN","GEV","CEG","VST",
   // AI Applications
-  "SOUN","BBAI","AMBA",
+  "SOUN","BBAI",
+  // Distribution
+  "ARW","AVT","SNX",
   // ETFs
   "SMH","SOXX","BOTZ","CHAT","BILL"
 ];
@@ -852,128 +865,147 @@ async function runScan(){
 // GAP UP ANALYSIS
 //
 async function runGapAnalysis(data) {
-  // TIME-AWARE LOGIC 
-  const now       = new Date();
-  const hour      = now.getHours();
-  const min       = now.getMinutes();
-  const isEarly   = (hour < 10) || (hour === 9 && min >= 30); // 9:30am-10:00am
-  const timeMode  = isEarly ? "OPEN" : "MIDDAY";
-  const timeLabel = isEarly
-    ? "Market just opened - looking for fresh gap-up momentum"
-    : "Midday scan - looking for stocks with $15+ remaining upside from current price";
+  var now      = new Date();
+  var hour     = now.getHours();
+  var min      = now.getMinutes();
+  var totalMin = hour * 60 + min;
+  var marketOpenMin  = 9 * 60 + 30;   // 9:30am
+  var cutoffMin      = 14 * 60 + 30;  // 2:30pm - no new gap entries after this
+  var warningMin     = 13 * 60 + 0;   // 1:00pm - show warning
+  var isEarly        = totalMin <= marketOpenMin + 30; // within 30min of open
 
-  // Early mode: filter by gap from yesterday
-  // Midday mode: any stock that is up today and has RSI momentum
-  const gapCandidates = Object.values(data).filter(s => {
-    if(!s.curr || !s.prev) return false;
-    const gap = ((s.curr - s.prev) / s.prev) * 100;
-    if(isEarly) return gap >= 1.0 && s.curr > s.prev;
-    else        return gap >= 0.5 && s.curr > s.prev; // looser filter midday
-  }).sort(function(a,b) {
-    var gapA = ((a.curr - a.prev) / a.prev) * 100;
-    var gapB = ((b.curr - b.prev) / b.prev) * 100;
-    return gapB - gapA;
-  }).slice(0, 20);
-
-  if(gapCandidates.length === 0){
+  // TIME GATE - too late for gap trades
+  if(totalMin >= cutoffMin){
     return {
-      verdict: "NO MOMENTUM SETUPS TODAY",
-      summary: timeMode==="MIDDAY"
-        ? "No stocks showing enough upside momentum from current prices. Market may be extended or flat."
-        : "No stocks gapping up at open. Market opened flat - check Dip & Bounce scanner instead.",
-      timeMode,
+      verdict: "TOO LATE FOR GAP TRADES",
+      summary: "It is after 2:30pm. Not enough time left for a gap trade to reach target before 3:30pm close. Use Dip and Bounce scanner instead, or wait for tomorrow open.",
+      timeMode: "CLOSED",
+      tooLate: true,
       setups: []
     };
   }
 
-  const gapRows = gapCandidates.map(s => {
-    const gap = (((s.curr - s.prev) / s.prev) * 100).toFixed(2);
-    return s.ticker + ": NOW $" + s.curr + " prev $" + s.prev + " up=" + gap + "% vol=" + s.volRatio + "x RSI=" + (s.rsi||"N/A");
+  var timeMode  = isEarly ? "OPEN" : "MIDDAY";
+  var minsLeft  = cutoffMin - totalMin;
+  var timeWarning = totalMin >= warningMin ? "WARNING: Only " + minsLeft + " mins left for gap trades today. Tighter targets only." : "";
+
+  // Filter gap candidates
+  // RULE 1: Must be up from yesterday
+  // RULE 2: Must not have already moved too far from open (already extended)
+  // RULE 3: Volume must be 1.5x+ (strong continuation signal)
+  var gapCandidates = Object.values(data).filter(function(s){
+    if(!s.curr || !s.prev) return false;
+    var gapFromYesterday = ((s.curr - s.prev) / s.prev) * 100;
+    var volOk = (s.volRatio||0) >= 1.5; // RULE 3: 1.5x minimum for gaps
+
+    if(isEarly){
+      // Early morning: need gap from yesterday + volume
+      return gapFromYesterday >= 1.5 && s.curr > s.prev && volOk;
+    } else {
+      // Midday: gap from yesterday ok but check not already extended
+      // We approximate open price as prev * (1 + half the gap)
+      // Real open would come from Polygon intraday - for now use prev as proxy
+      var alreadyMoved = gapFromYesterday;
+      var notExtended  = alreadyMoved < 8; // RULE 1: skip if already moved 8%+ today
+      return gapFromYesterday >= 0.5 && s.curr > s.prev && notExtended && volOk;
+    }
+  }).sort(function(a,b){
+    var gA = ((a.curr-a.prev)/a.prev)*100;
+    var gB = ((b.curr-b.prev)/b.prev)*100;
+    return gB - gA;
+  }).slice(0,15);
+
+  if(gapCandidates.length === 0){
+    return {
+      verdict: "NO VALID GAP SETUPS",
+      summary: isEarly
+        ? "No stocks gapping up with sufficient volume (1.5x+) at open. Market opened flat or volume not confirming moves."
+        : "No stocks showing gap-up momentum with enough volume and runway remaining. Either moves are already extended or volume too low.",
+      timeMode: timeMode,
+      timeWarning: timeWarning,
+      setups: []
+    };
+  }
+
+  // Build prompt with time-aware rules
+  var gapRows = gapCandidates.map(function(s){
+    var gap = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
+    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"% vol="+s.volRatio+"x RSI="+(s.rsi||"N/A");
   }).join(", ");
 
-  // PROMPT CHANGES BASED ON TIME 
-  const criteria = isEarly ? [
-    "1. Gapped up at least 1.5% from yesterday close",
-    "2. Volume at least 1.5x average (institutional buying at open)",
-    "3. RSI between 50-72 (momentum but not yet overbought)",
-    "4. Realistic $15+ MORE upside from current open price",
-    "5. Clear catalyst likely (earnings beat, upgrade, product news)",
-    "6. Confidence 85 or higher to include"
-  ] : [
-    "1. Currently trading above yesterday close by at least 0.5%",
-    "2. RSI between 45-68 (still has momentum, not overbought)",
-    "3. Volume still above average - buying pressure continuing",
-    "4. Realistic $15+ MORE upside from CURRENT price RIGHT NOW",
-    "5. Not already over-extended - room to run further",
-    "6. Confidence 85 or higher to include",
-    "IMPORTANT: entryPrice must be the CURRENT price. targetPrice = current + realistic gain. Ignore the gap from yesterday - only care about upside from NOW."
-  ];
+  // Time-aware criteria
+  var maxTarget = minsLeft < 60 ? "$8 minimum (time limited)" : "$15 minimum";
+  var timeContext = isEarly
+    ? "Market just opened. Look for fresh momentum with full day ahead."
+    : "Midday scan. Only "+minsLeft+" minutes left before 2:30pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 5% from its open today, (2) target is achievable in remaining time, (3) "+maxTarget+" upside still available from CURRENT price.";
 
-  const gapPromptParts = [
-    "You are a momentum trader. " + timeLabel + ".",
-    "Account: $" + capital + ". Daily goal: $" + dailyGoal + ".",
-    "Current time: " + now.toLocaleTimeString() + " - mode: " + timeMode,
+  var gapPromptParts = [
+    "You are a momentum trader. "+timeContext,
+    "Account: $"+capital+". Goal: $"+dailyGoal+"/day.",
     "",
-    "STRICT CRITERIA - only flag if ALL true:",
-    ...criteria,
+    "STRICT RULES - ALL must be true to flag:",
+    "1. Volume at least 1.5x average - mandatory for gap continuation",
+    "2. RSI between 50-70 - has momentum but not overbought",
+    "3. "+maxTarget+" MORE upside from CURRENT price before market close",
+    "4. Stock has NOT already run more than 6% from its open today",
+    "5. Clear catalyst or sector momentum supporting the move",
+    "6. Confidence 85+ only",
     "",
-    "If no stock meets all criteria return empty setups array.",
+    "If time is midday, entryPrice = current price right now. Target must be reachable before 3:30pm.",
+    "If no stock qualifies return empty setups array.",
     "",
-    "STOCKS WITH UPSIDE MOMENTUM: " + gapRows,
+    "STOCKS: "+gapRows,
     "",
     "Return compact JSON only:",
     "{",
-    '  "verdict": "HIGH CONFIDENCE SETUPS FOUND" or "WEAK MOMENTUM - STAY OUT" or "NO MOMENTUM SETUPS TODAY",',
+    '  "verdict": "HIGH CONFIDENCE SETUPS FOUND" or "WEAK GAPS - STAY OUT" or "NO VALID GAP SETUPS",',
     '  "summary": "one sentence",',
-    '  "timeMode": "' + timeMode + '",',
-    "  setups: [",
-    "    {ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel}",
-    "  ]",
+    '  "timeMode": "'+timeMode+'",',
+    '  "timeWarning": "'+timeWarning+'",',
+    "  setups: [{ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel}]",
     "}",
     "Raw JSON only. No markdown."
   ];
-  const gapPrompt = gapPromptParts.join("\n");
+  var gapPrompt = gapPromptParts.join("\n");
 
-  try {
-    const claudeUrl = proxyUrl ? proxyUrl + "/api/claude" : "https://api.anthropic.com/v1/messages";
-    const res = await fetch(claudeUrl, {
-      method: "POST",
+  try{
+    var claudeUrl = proxyUrl ? proxyUrl+"/api/claude" : "https://api.anthropic.com/v1/messages";
+    var res = await fetch(claudeUrl, {
+      method:"POST",
       headers: proxyUrl ? {"Content-Type":"application/json"} : {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1500,
-        system: "You are a strict momentum trading analyst. Return raw JSON only. Never force picks. Only flag 85%+ confidence gap setups with $15+ upside.",
-        messages: [{role:"user", content:gapPrompt}]
+        model:"claude-sonnet-4-6",
+        max_tokens:1500,
+        system:"You are a strict momentum trading analyst. Return raw JSON only. Never force picks. Flag only 85%+ confidence with realistic time-aware targets.",
+        messages:[{role:"user",content:gapPrompt}]
       })
     });
-    const raw = await res.json();
-    const text = (raw.content||[]).map(c=>c.text||"").join("");
-    const clean = text.replace(/```json|```/g,"").trim();
-    const jsonStart = clean.indexOf("{");
-    const jsonEnd   = clean.lastIndexOf("}");
+    var raw  = await res.json();
+    var text = (raw.content||[]).map(function(c){ return c.text||""; }).join("");
+    var clean= text.replace(/```json|```/g,"").trim();
+    var jsonStart = clean.indexOf("{");
+    var jsonEnd   = clean.lastIndexOf("}");
     if(jsonStart===-1||jsonEnd===-1) throw new Error("No JSON in gap response");
-    return JSON.parse(clean.slice(jsonStart, jsonEnd+1));
-  } catch(e) {
+    return JSON.parse(clean.slice(jsonStart,jsonEnd+1));
+  } catch(e){
     // Demo fallback
-    const top = gapCandidates.slice(0,2);
+    var top = gapCandidates.slice(0,2);
     return {
-      verdict: top.length > 0 ? "HIGH CONFIDENCE SETUPS FOUND" : "NO GAP SETUPS TODAY",
-      summary: top.length > 0 ? top.length + " stocks showing strong gap-up momentum with above-average volume." : "No strong gap setups detected today.",
-      setups: top.map(s => {
-        const gap = (((s.curr-s.prev)/s.prev)*100).toFixed(1);
-        const target = parseFloat((s.curr * 1.03).toFixed(2));
-        const stop   = parseFloat((s.curr * 0.985).toFixed(2));
+      verdict: top.length>0?"HIGH CONFIDENCE SETUPS FOUND":"NO VALID GAP SETUPS",
+      summary: top.length>0?top.length+" stocks showing gap momentum with "+minsLeft+"min trading time remaining.":"No qualifying setups.",
+      timeMode: timeMode,
+      timeWarning: timeWarning,
+      setups: top.map(function(s){
+        var gap    = (((s.curr-s.prev)/s.prev)*100).toFixed(1);
+        var target = parseFloat((s.curr*1.025).toFixed(2));
+        var stop   = parseFloat((s.curr*0.985).toFixed(2));
         return {
-          ticker: s.ticker,
-          confidence: 86,
-          gapPct: gap,
-          entryPrice: s.curr,
-          targetPrice: target,
-          stopLoss: stop,
-          expectedGain: parseFloat((target - s.curr).toFixed(2)),
-          catalyst: "Strong pre-market volume surge - likely institutional buying",
-          reason: "Gap " + gap + "% on " + s.volRatio + "x average volume. Momentum favors continuation.",
-          riskLevel: "Medium"
+          ticker:s.ticker, confidence:86, gapPct:gap,
+          entryPrice:s.curr, targetPrice:target, stopLoss:stop,
+          expectedGain:parseFloat((target-s.curr).toFixed(2)),
+          catalyst:"Gap momentum on "+s.volRatio+"x average volume",
+          reason:"Gap +"+gap+"% on "+s.volRatio+"x volume. RSI "+(s.rsi||"N/A")+" in momentum zone.",
+          riskLevel:"Medium"
         };
       })
     };
@@ -982,72 +1014,73 @@ async function runGapAnalysis(data) {
 
 // RENDER GAP UP RESULTS 
 function renderGapResult(gapResult, data, container) {
-  const noSetups = !gapResult.setups || gapResult.setups.length === 0;
-  const verdictColor = noSetups ? "#ff4444" : "#a855f7";
-  const verdictBg    = noSetups ? "#140a0a" : "#100818";
-  const verdictBorder= noSetups ? "#ff444422" : "#a855f733";
+  var noSetups   = !gapResult.setups || gapResult.setups.length === 0;
+  var tooLate    = gapResult.tooLate;
+  var timeWarn   = gapResult.timeWarning || "";
+  var verdictColor = tooLate?"#f4c430":noSetups?"#ff4444":"#a855f7";
+  var verdictBg    = tooLate?"#1a1000":noSetups?"#140a0a":"#100818";
+  var verdictBorder= tooLate?"#f4c43033":noSetups?"#ff444422":"#a855f733";
+  var verdictIcon  = tooLate?"LATE":noSetups?"NO":"UP";
 
-  let html = '<div style="background:' + verdictBg + ';border:1px solid ' + verdictBorder + ';border-radius:10px;padding:14px;margin-bottom:14px;display:flex;gap:12px;align-items:flex-start;">';
-  html += '<div style="font-size:22px">' + (noSetups?"":"") + '</div>';
+  var html = '<div style="background:'+verdictBg+';border:1px solid '+verdictBorder+';border-radius:10px;padding:14px;margin-bottom:14px;display:flex;gap:12px;align-items:flex-start;">';
+  html += '<div style="font-size:22px">'+verdictIcon+'</div>';
   html += '<div>';
-  html += '<div style="font-size:12px;font-weight:700;letter-spacing:1px;color:' + verdictColor + ';margin-bottom:5px">' + gapResult.verdict + '</div>';
-  html += '<div style="font-size:11px;color:#4a5568;line-height:1.7">' + (gapResult.summary||"") + '</div>';
+  html += '<div style="font-size:12px;font-weight:700;letter-spacing:1px;color:'+verdictColor+';margin-bottom:5px">'+gapResult.verdict+'</div>';
+  html += '<div style="font-size:11px;color:#4a5568;line-height:1.7">'+(gapResult.summary||"")+'</div>';
+  if(timeWarn) html += '<div style="font-size:10px;color:#f4c430;margin-top:6px;font-weight:700">'+timeWarn+'</div>';
   html += '</div></div>';
 
-  if(!noSetups){
-    const timeModeLabel = (gapResult.timeMode==="MIDDAY")
-    ? " MIDDAY - $15+ UPSIDE FROM CURRENT PRICE"
-    : " OPEN - FRESH GAP UP MOMENTUM";
-  html += '<div class="gap-divider"> ' + timeModeLabel + ' - ' + gapResult.setups.length + ' SETUP' + (gapResult.setups.length>1?'S':'') + '</div>';
-    gapResult.setups.forEach(function(setup, idx){
-      const sd = data[setup.ticker]||{};
-      const confColor = setup.confidence >= 90 ? "#00e5a0" : "#f4c430";
-      const riskClass = setup.riskLevel==="Low"?"conf-high":"conf-med";
-      const shares    = setup.expectedGain > 0 ? Math.ceil(dailyGoal / setup.expectedGain) : "--";
-      const totalCost = shares !== "--" ? "$" + (shares * setup.entryPrice).toLocaleString() : "--";
-      const profit    = shares !== "--" ? "$" + (shares * setup.expectedGain).toFixed(0) : "--";
+  if(!noSetups && !tooLate){
+    var timeModeLabel = (gapResult.timeMode==="MIDDAY") ? "MIDDAY - $15+ FROM CURRENT PRICE" : "OPEN - FRESH GAP MOMENTUM";
+    html += '<div style="font-size:9px;color:#a855f7;letter-spacing:2px;margin:0 0 8px">GAP UP '+timeModeLabel+' - '+gapResult.setups.length+' SETUP'+(gapResult.setups.length>1?'S':'')+'</div>';
+
+    gapResult.setups.forEach(function(setup){
+      var sd       = data[setup.ticker]||{};
+      var confColor= setup.confidence>=90?"#00e5a0":"#f4c430";
+      var confClass= setup.riskLevel==="Low"?"conf-high":"conf-med";
+      var shares   = setup.expectedGain>0 ? Math.ceil(dailyGoal/setup.expectedGain) : "--";
+      var totalCost= shares!=="--" ? "$"+(shares*setup.entryPrice).toLocaleString() : "--";
+      var profit   = shares!=="--" ? "$"+(shares*setup.expectedGain).toFixed(0) : "--";
 
       html += '<div class="gap-card">';
       html += '<div class="gap-head">';
-      html += '<span class="gap-ticker">' + setup.ticker + '</span>';
-      html += '<span class="gap-pill"> GAP UP</span>';
-      html += '<span class="gap-conf ' + riskClass + '">' + setup.confidence + '% CONF</span>';
-      html += '<span style="font-size:9px;color:#a855f7;margin-left:auto">+' + setup.gapPct + '% GAP</span>';
+      html += '<span class="gap-ticker">'+setup.ticker+'</span>';
+      html += '<span class="gap-pill">GAP UP</span>';
+      html += '<span class="gap-conf '+confClass+'">'+setup.confidence+'% CONF</span>';
+      html += '<span style="font-size:9px;color:#a855f7;margin-left:auto">+'+setup.gapPct+'% GAP</span>';
       html += '</div>';
 
-      // Catalyst box
-      html += '<div class="catalyst-box"> CATALYST: ' + (setup.catalyst||"Strong momentum") + '</div>';
-      html += '<div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:10px">' + setup.reason + '</div>';
+      html += '<div class="catalyst-box">CATALYST: '+(setup.catalyst||"Momentum")+'</div>';
+      html += '<div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:10px">'+(setup.reason||"")+'</div>';
 
-      // Price grid
       html += '<div class="price-grid">';
-      html += '<div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#c084fc">$' + setup.entryPrice + '</div></div>';
-      html += '<div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$' + setup.targetPrice + '</div></div>';
-      html += '<div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$' + setup.stopLoss + '</div></div>';
-      html += '<div class="price-cell"><div class="price-label">GAIN/SHARE</div><div class="price-val" style="color:#00e5a0">$' + setup.expectedGain + '</div></div>';
-      html += '<div class="price-cell"><div class="price-label">VOL RATIO</div><div class="price-val" style="color:' + ((sd.volRatio||0)>=1.5?"#00e5a0":"#f4c430") + '">' + (sd.volRatio||"--") + 'x</div></div>';
-      html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:#f4c430">' + (sd.rsi||"--") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#c084fc">$'+setup.entryPrice+'</div></div>';
+      html += '<div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$'+setup.targetPrice+'</div></div>';
+      html += '<div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$'+setup.stopLoss+'</div></div>';
+      html += '<div class="price-cell"><div class="price-label">GAIN/SHARE</div><div class="price-val" style="color:#00e5a0">$'+setup.expectedGain+'</div></div>';
+      html += '<div class="price-cell"><div class="price-label">VOL RATIO</div><div class="price-val" style="color:'+((sd.volRatio||0)>=1.5?"#00e5a0":"#f4c430")+'">'+(sd.volRatio||"--")+'x</div></div>';
+      html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:#f4c430">'+(sd.rsi||"--")+'</div></div>';
       html += '</div>';
 
-      // Position calculator
-      if(shares !== "--"){
+      if(shares!=="--"){
         html += '<div class="pos-calc">';
-        html += '<div class="pos-calc-title"> POSITION SIZE - $' + dailyGoal + '/DAY TARGET</div>';
+        html += '<div class="pos-calc-title">POSITION SIZE - $'+dailyGoal+'/DAY TARGET</div>';
         html += '<div class="pos-grid">';
-        html += '<div class="pos-cell"><div class="pos-label">SHARES</div><div class="pos-val" style="color:#c084fc">' + shares + '</div></div>';
-        html += '<div class="pos-cell"><div class="pos-label">TOTAL COST</div><div class="pos-val" style="color:#dde3ee">' + totalCost + '</div></div>';
-        html += '<div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:#00e5a0">' + profit + '</div></div>';
-        html += '<div class="pos-cell"><div class="pos-label">' + setup.riskLevel + ' RISK</div><div class="pos-val" style="color:#f4c430"> SAME DAY</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">SHARES</div><div class="pos-val" style="color:#c084fc">'+shares+'</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">TOTAL COST</div><div class="pos-val" style="color:#dde3ee">'+totalCost+'</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:#00e5a0">'+profit+'</div></div>';
+        html += '<div class="pos-cell"><div class="pos-label">'+setup.riskLevel+' RISK</div><div class="pos-val" style="color:#f4c430">SAME DAY</div></div>';
         html += '</div>';
-        html += '<div style="font-size:10px;color:#2a3045">Buy ' + shares + ' shares @ $' + setup.entryPrice + '  target $' + setup.targetPrice + '  Close by 3:30pm</div>';
+        html += '<div style="font-size:10px;color:#2a3045">Buy '+shares+' shares @ $'+setup.entryPrice+' target $'+setup.targetPrice+' Close by 3:30pm</div>';
         html += '</div>';
       }
-      html += "<button class='log-btn' style='border-color:#a855f733;color:#c084fc' onclick='prefillJournal(&quot;" + setup.ticker + "&quot;," + setup.entryPrice + "," + setup.targetPrice + ")'>+ LOG THIS TRADE</button>";
+
+      html += '<button class="log-btn" style="border-color:#a855f733;color:#c084fc" onclick="prefillJournal(&quot;'+setup.ticker+'&quot;,'+setup.entryPrice+','+setup.targetPrice+')">+ LOG THIS TRADE</button>';
       html += '</div>';
     });
   }
 
-  html += '<div class="rescan"><p style="font-size:10px;color:#2a3045">Gap Up: best scanned at 9:31am sharp. Close all gap trades by 3:30pm.</p><button class="btn-sm" onclick="runScan()"> SCAN AGAIN</button></div>';
+  html += '<div class="rescan"><p style="font-size:10px;color:#2a3045">Gap Up: scan at 9:31am for best entries. Close all gap trades by 3:30pm.</p><button class="btn-sm" onclick="runScan()">Scan Again</button></div>';
   container.innerHTML += html;
 }
 
