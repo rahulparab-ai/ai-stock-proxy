@@ -234,13 +234,13 @@
     <div style="display:table;width:100%;border-spacing:6px;margin-bottom:8px;">
       <div style="display:table-row;">
         <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-dip" onclick="try{setMode('dip')}catch(e){alert('Error: '+e.message)}" style="width:100%;background:#0a1a2e;border:2px solid #2d6aff;border-radius:8px;padding:14px 4px;color:#5b8fff;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">DIP &amp; BOUNCE</button>
+          <button id="mode-dip" onclick="setMode('dip')" style="width:100%;background:#0a1a2e;border:2px solid #2d6aff;border-radius:8px;padding:14px 4px;color:#5b8fff;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">DIP &amp; BOUNCE</button>
         </div>
         <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-gap" onclick="try{setMode('gap')}catch(e){alert('Error: '+e.message)}" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">GAP UP</button>
+          <button id="mode-gap" onclick="setMode('gap')" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">GAP UP</button>
         </div>
         <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-both" onclick="try{setMode('both')}catch(e){alert('Error: '+e.message)}" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">BOTH</button>
+          <button id="mode-both" onclick="setMode('both')" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">BOTH</button>
         </div>
       </div>
     </div>
@@ -461,7 +461,7 @@ function showTab(name){
   ["scanner","watchlist","journal","setup"].forEach(t=>{
     document.getElementById("tab-"+t).style.display=t===name?"block":"none";
   });
-  document.querySelectorAll(".tab").forEach((el,i)=>{
+  document.querySelectorAll(".tab").forEach(function(el,i){
     el.className="tab"+(["scanner","watchlist","journal","setup"][i]===name?" active":"");
   });
 }
@@ -554,7 +554,7 @@ async function toggleNotif(){
   notifOn=true;
   document.getElementById("notif-btn").textContent="🔔 HOURLY REMINDER ON — TAP TO STOP";
   document.getElementById("notif-btn").className="btn-notif on";
-  notifTimer=setInterval(()=>{
+  notifTimer=setInterval(function(){
     new Notification("📈 AI Stock Scanner",{
       body:"It's been an hour! Tap to scan for swing setups.",
     });
@@ -869,9 +869,9 @@ async function runGapAnalysis(data) {
     const gap = ((s.curr - s.prev) / s.prev) * 100;
     if(isEarly) return gap >= 1.0 && s.curr > s.prev;
     else        return gap >= 0.5 && s.curr > s.prev; // looser filter midday
-  }).sort((a,b) => {
-    const gapA = ((a.curr - a.prev) / a.prev) * 100;
-    const gapB = ((b.curr - b.prev) / b.prev) * 100;
+  }).sort(function(a,b) {
+    var gapA = ((a.curr - a.prev) / a.prev) * 100;
+    var gapB = ((b.curr - b.prev) / b.prev) * 100;
     return gapB - gapA;
   }).slice(0, 20);
 
@@ -1088,8 +1088,8 @@ function renderResult(result,data){
   // ── TIER 1: BUY TRADES ──────────────────────────────
   if(hasBuys){
     html += '<div style="font-size:9px;color:#00e5a0;letter-spacing:2px;margin:14px 0 8px">🟢 BUY NOW — ' + buyTrades.length + ' SETUP' + (buyTrades.length>1?'S':'') + '</div>';
-    buyTrades.forEach((trade,idx)=>{
-      const sd         = data[trade.ticker]||{};
+    buyTrades.forEach(function(trade,idx){
+      var sd         = data[trade.ticker]||{};
       const scoreColor = trade.score>=80?"#00e5a0":trade.score>=65?"#f4c430":"#ff6b6b";
       const riskClass  = trade.riskLevel==="Low"?"pill-low":trade.riskLevel==="Medium"?"pill-med":"pill-hi";
       const nf = trade.newsFlag||"";
