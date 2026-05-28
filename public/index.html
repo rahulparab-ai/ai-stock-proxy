@@ -478,9 +478,9 @@ function showTab(name){
 // ══════════════════════════════════════════════════════
 function updateHeader(){
   document.getElementById("hdr-sub").textContent=
-    `${watchlist.length} stocks · Manual scan · $${dailyGoal}/day target`;
+    watchlist.length + " stocks · Manual scan · $" + dailyGoal + "/day target";
   document.getElementById("wl-sub").textContent=
-    `${watchlist.length} stocks tracked`;
+    watchlist.length + " stocks tracked";
 }
 
 function updatePnLBar(){
@@ -505,11 +505,7 @@ function updatePnLBar(){
 // ══════════════════════════════════════════════════════
 function renderWatchlist(){
   document.getElementById("ticker-grid").innerHTML=
-    watchlist.map(t=>`
-      <div class="ticker-chip">
-        <span class="ticker-name">${t}</span>
-        <button class="ticker-rm" onclick="removeTicker('${t}')">×</button>
-      </div>`).join("");
+    watchlist.map(t=>"<div class='ticker-chip'><span class='ticker-name'>" + t + "</span><button class='ticker-rm' onclick='removeTicker(\"" + t + "\")'>×</button></div>").join("");
   updateHeader();
 }
 function addTicker(){
@@ -667,12 +663,12 @@ async function runScan(){
   if(proxyUrl){
     showStatus("Fetching real prices from Polygon/Massive...","");
     try{
-      const resp=await fetch(`${proxyUrl}/api/stocks?tickers=${watchlist.join(",")}`);
+      const resp=await fetch(proxyUrl + "/api/stocks?tickers=" + watchlist.join(","));
       const json=await resp.json();
       (json.stocks||[]).forEach(s=>{if(!s.error)data[s.ticker]=s;});
       const failed=(json.stocks||[]).filter(s=>s.error).map(s=>s.ticker);
       showStatus(
-        failed.length?`⚠ Real data loaded. Missing: ${failed.join(", ")}`:`✅ Real prices loaded for ${Object.keys(data).length} stocks`,
+        failed.length?"⚠ Real data loaded. Missing: " + failed.join(", "):"✅ Real prices loaded for " + Object.keys(data).length + " stocks",
         failed.length?"warn":"ok"
       );
       watchlist.forEach(t=>{if(!data[t])data[t]=simulateStock(t);});
@@ -691,11 +687,7 @@ async function runScan(){
   const allStocks = Object.values(data);
   const movers = allStocks.filter(s => Math.abs(s.dipPct) >= 0.5 || s.rsi < 50);
   const flatStocks = allStocks.filter(s => Math.abs(s.dipPct) < 0.5 && (!s.rsi || s.rsi >= 50));
-  const rows = movers.map(s=>
-    `${s.ticker}: $${s.curr} (prev $${s.prev}), dip ${s.dipPct}%, `+
-    `RSI ${s.rsi||"N/A"}, vol ${fmtM(s.vol)} (${s.volRatio}x avg), `+
-    `${s.distFromLow}% from 52w low`
-  ).join("\n");
+  const rows = movers.map(function(s){ return s.ticker+": $"+s.curr+" (prev $"+s.prev+"), dip "+s.dipPct+"%, RSI "+(s.rsi||"N/A")+", vol "+fmtM(s.vol)+" ("+(s.volRatio||0)+"x avg), "+(s.distFromLow||"?")+"%"; }).join("\n");
   const flatList = flatStocks.map(s=>s.ticker).join(", ");
 
   // Send to Claude:
@@ -768,9 +760,9 @@ async function runScan(){
   if(scanMode !== "gap"){
   // ── DEBUG: confirm what URL we are hitting ──────────────
   const claudeUrl = proxyUrl
-    ? `${proxyUrl}/api/claude`
+    ? proxyUrl + "/api/claude"
     : "https://api.anthropic.com/v1/messages";
-  showStatus(`🤖 Calling Claude via: ${claudeUrl}`, "");
+  showStatus("🤖 Calling Claude via: " + claudeUrl, "");
   console.log("[Scanner] Claude URL:", claudeUrl);
   console.log("[Scanner] proxyUrl value:", proxyUrl);
 
@@ -808,24 +800,24 @@ async function runScan(){
   } catch(e) {
     claudeError = e.message;
     console.error("[Scanner] Claude FAILED:", e.message);
-    showStatus(`❌ Claude error: ${e.message} — showing demo data`, "warn");
+    showStatus("❌ Claude error: " + e.message + " — showing demo data", "warn");
 
     // Demo fallback — clearly labelled
     const q=Object.values(data).filter(s=>Math.abs(s.dipPct)>=1.5&&s.rsi<40&&s.volRatio>=1.2&&s.distFromLow>10);
     result=q.length===0
-      ?{verdict:"⚠ DEMO — NO TRADES (Claude offline)",summary:`Claude call failed: ${e.message}. Fix in Setup tab then rescan.`,trades:[]}
-      :{verdict:"⚠ DEMO DATA — Claude offline",summary:`Claude call failed: ${e.message}. Results below are simulated, NOT real analysis.`,
-        trades:q.slice(0,3).map((s,i)=>({
+      ?{verdict:"⚠ DEMO — NO TRADES (Claude offline)",summary:"Claude call failed: " + e.message + ". Fix in Setup tab then rescan.",trades:[]}
+      :{verdict:"⚠ DEMO DATA — Claude offline",summary:"Claude call failed: " + e.message + ". Results below are simulated, NOT real analysis.",
+        trades:q.slice(0,3).map(function(s,i){ return {
           ticker:s.ticker,score:88-i*9,action:"BUY DIP",
           entryPrice:s.curr,
           targetPrice:parseFloat((s.curr+s.dipDollars*0.75).toFixed(2)),
           stopLoss:parseFloat((s.curr-s.dipDollars*0.4).toFixed(2)),
-          holdDays:"1–2",
-          reason:`⚠ DEMO: RSI ${s.rsi} oversold, ${s.volRatio}x avg volume. Claude offline — do not trade on this.`,
+          holdDays:"1-2",
+          reason:"⚠ DEMO: RSI " + s.rsi + " oversold, " + s.volRatio + "x avg volume. Claude offline — do not trade on this.",
           newsFlag:"⚠ DEMO — not real analysis",
           newsSummary:"Claude API not connected. See Setup tab.",
           riskLevel:s.rsi<28?"Low":"Medium"
-        }))};
+        };})};
   }
 
   } // end if(scanMode !== gap)
@@ -1089,16 +1081,16 @@ function renderResult(result,data){
   // ── VERDICT BANNER ──────────────────────────────────
   const verdictClass  = hasBuys ? "trade" : watchTrades.length>0 ? "" : "notrade";
   const verdictIcon   = hasBuys ? "✅" : watchTrades.length>0 ? "👁" : "🚫";
-  let html = `
-    <div class="verdict ${verdictClass}" style="${!hasBuys&&watchTrades.length>0?'background:#0d1020;border:1px solid #f4c43033':''}">
-      <div class="verdict-icon">${verdictIcon}</div>
-      <div>
-        <div class="verdict-title" style="${!hasBuys&&watchTrades.length>0?'color:#f4c430':''}">${result.verdict}</div>
-        <div class="verdict-summary">${result.summary}</div>
-        ${result.marketMood?`<div style="font-size:10px;color:#3a4255;margin-top:4px">🌡 ${result.marketMood}</div>`:""}
-        <div class="verdict-meta">Scanned ${watchlist.length} stocks at ${now} · Need $${pnlLeft.toFixed(0)} more today</div>
-      </div>
-    </div>`;
+  const watchStyle = (!hasBuys&&watchTrades.length>0) ? 'background:#0d1020;border:1px solid #f4c43033' : '';
+  const titleStyle = (!hasBuys&&watchTrades.length>0) ? 'color:#f4c430' : '';
+  let html = '<div class="verdict ' + verdictClass + '" style="' + watchStyle + '">';
+  html += '<div class="verdict-icon">' + verdictIcon + '</div>';
+  html += '<div>';
+  html += '<div class="verdict-title" style="' + titleStyle + '">' + (result.verdict||"") + '</div>';
+  html += '<div class="verdict-summary">' + (result.summary||"") + '</div>';
+  if(result.marketMood) html += '<div style="font-size:10px;color:#3a4255;margin-top:4px">🌡 ' + result.marketMood + '</div>';
+  html += '<div class="verdict-meta">Scanned ' + watchlist.length + ' stocks at ' + now + ' · Need $' + pnlLeft.toFixed(0) + ' more today</div>';
+  html += '</div></div>';
 
   // ── TIER 1: BUY TRADES ──────────────────────────────
   if(hasBuys){
@@ -1111,29 +1103,29 @@ function renderResult(result,data){
       const newsClass  = nf.startsWith("SAFE")?"news-safe":nf.startsWith("CAUTION")?"news-warn":"news-skip";
       const pos        = calcPosition(trade.entryPrice, trade.targetPrice, trade.stopLoss);
       const tradeIdx   = idx;
-      html+=`
+      html+="
         <div class="trade-card">
           <div class="trade-head">
-            <div class="score-badge" style="border:2.5px solid ${scoreColor};box-shadow:0 0 10px ${scoreColor}44;">
-              <span class="score-num" style="color:${scoreColor}">${trade.score}</span>
-              <span class="score-lbl" style="color:${scoreColor}99">SCORE</span>
+            <div class="score-badge" style="border:2.5px solid " + (scoreColor) + ";box-shadow:0 0 10px " + (scoreColor) + "44;">
+              <span class="score-num" style="color:" + (scoreColor)>" + (trade.score) + "</span>
+              <span class="score-lbl" style="color:" + (scoreColor) + "99">SCORE</span>
             </div>
-            <span class="trade-ticker">${trade.ticker}</span>
-            <span class="pill pill-action">${trade.action}</span>
-            <span class="pill ${riskClass}">${trade.riskLevel} RISK</span>
-            <span style="font-size:9px;color:#2a3045;margin-left:auto">${trade.holdDays||"1-2"}d</span>
+            <span class="trade-ticker">" + (trade.ticker) + "</span>
+            <span class="pill pill-action">" + (trade.action) + "</span>
+            <span class="pill " + (riskClass)>" + (trade.riskLevel) + " RISK</span>
+            <span style="font-size:9px;color:#2a3045;margin-left:auto">" + (trade.holdDays||"1-2") + "d</span>
           </div>
-          <div class="trade-reason">${trade.reason}</div>
-          <div class="${newsClass}">📰 ${trade.newsFlag} — ${trade.newsSummary}</div>
+          <div class="trade-reason">" + (trade.reason) + "</div>
+          <div class=(newsClass)>📰 " + (trade.newsFlag) + " — " + (trade.newsSummary) + "</div>
           <div class="price-grid">
-            <div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$${sd.curr||trade.entryPrice||"—"}</div></div>
-            <div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">${sd.dipPct?sd.dipPct+"%":"—"}</div></div>
-            <div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:${(sd.rsi||50)<35?"#00e5a0":"#f4c430"}">${sd.rsi||"—"}</div></div>
-            <div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$${trade.entryPrice||"—"}</div></div>
-            <div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$${trade.targetPrice||"—"}</div></div>
-            <div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$${trade.stopLoss||"—"}</div></div>
+            <div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$" + (sd.curr||trade.entryPrice||"—") + "</div></div>
+            <div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">" + (sd.dipPct?sd.dipPct+"%":"—") + "</div></div>
+            <div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:" + ((sd.rsi||50)<35?"#00e5a0":"#f4c430")>" + (sd.rsi||"—") + "</div></div>
+            <div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$" + (trade.entryPrice||"—") + "</div></div>
+            <div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$" + (trade.targetPrice||"—") + "</div></div>
+            <div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$" + (trade.stopLoss||"—") + "</div></div>
           </div>
-          ${pos?`
+          ${pos?"
           <div class="pos-calc">
             <div class="pos-calc-title">💰 POSITION SIZE — $${dailyGoal}/DAY TARGET</div>
             <div class="pos-grid">
@@ -1143,9 +1135,9 @@ function renderResult(result,data){
               <div class="pos-cell"><div class="pos-label">MAX LOSS</div><div class="pos-val" style="color:#ff4444">$${pos.maxRisk}</div></div>
             </div>
             <div style="font-size:10px;color:#2a3045">R:R = 1:${pos.rr} · Buy ${pos.shares} shares @ $${trade.entryPrice} → $${trade.targetPrice}</div>
-          </div>`:""}
-          <button class="log-btn" onclick="quickLog(${tradeIdx})">+ LOG THIS TRADE</button>
-        </div>`;
+          </div>":""}
+          <button class="log-btn" onclick="quickLog(" + (tradeIdx) + ")">+ LOG THIS TRADE</button>
+        </div>";
     });
   }
 
@@ -1154,17 +1146,17 @@ function renderResult(result,data){
     html+='<div style="font-size:9px;color:#f4c430;letter-spacing:2px;margin:16px 0 8px">🟡 WATCHING — ' + watchTrades.length + ' APPROACHING SETUP' + (watchTrades.length>1?'S':'') + '</div>';
     watchTrades.forEach(trade=>{
       const sd=data[trade.ticker]||{};
-      html+=`
+      html+="
         <div style="background:#0d1008;border:1px solid #f4c43033;border-left:3px solid #f4c430;border-radius:10px;padding:14px;margin-bottom:10px;">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
-            <span style="font-size:17px;font-weight:800;color:#f0f4ff">${trade.ticker}</span>
+            <span style="font-size:17px;font-weight:800;color:#f0f4ff">" + (trade.ticker) + "</span>
             <span class="pill" style="background:#f4c43011;color:#f4c430;border:1px solid #f4c43033">👁 WATCHING</span>
-            ${sd.curr?`<span style="font-size:11px;color:#3a4255">$${sd.curr}</span>`:""}
-            ${sd.dipPct?`<span style="font-size:11px;color:#ff6b6b">${sd.dipPct}%</span>`:""}
-            ${sd.rsi?`<span style="font-size:11px;color:#f4c430">RSI ${sd.rsi}</span>`:""}
+            ${sd.curr?"<span style="font-size:11px;color:#3a4255">$${sd.curr}</span>":""}
+            ${sd.dipPct?"<span style="font-size:11px;color:#ff6b6b">${sd.dipPct}%</span>":""}
+            ${sd.rsi?"<span style="font-size:11px;color:#f4c430">RSI ${sd.rsi}</span>":""}
           </div>
-          <div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:8px">${trade.reason}</div>
-          ${trade.triggerPrice?`
+          <div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:8px">" + (trade.reason) + "</div>
+          ${trade.triggerPrice?"
           <div style="background:#080a12;border-radius:6px;padding:8px 12px;font-size:11px;">
             <span style="color:#2a3045;font-size:9px;letter-spacing:1px">TRIGGER PRICE </span>
             <span style="color:#f4c430;font-weight:800;font-size:14px">$${trade.triggerPrice}</span>
@@ -1196,11 +1188,11 @@ function renderResult(result,data){
 
   // ── TOMORROW WATCH ──────────────────────────────────
   if(result.tomorrowWatch){
-    html+=`
+    html+="
       <div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:12px;margin-bottom:12px;">
         <div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:5px">📅 TOMORROW WATCH</div>
-        <div style="font-size:11px;color:#4a5568;line-height:1.7">${result.tomorrowWatch}</div>
-      </div>`;
+        <div style="font-size:11px;color:#4a5568;line-height:1.7">" + (result.tomorrowWatch) + "</div>
+      </div>";
   }
 
   // ── SCAN TRANSPARENCY — why stocks were/weren't picked ──
@@ -1229,11 +1221,11 @@ function renderResult(result,data){
   }
 
   // ── RESCAN BAR ──────────────────────────────────────
-  html+=`
+  html+="
     <div class="rescan">
-      <p>${notifOn?"Hourly reminder on — you'll be notified.":"Enable hourly reminder so you never miss a setup."}</p>
+      <p>" + (notifOn?"Hourly reminder on — you'll be notified.":"Enable hourly reminder so you never miss a setup.") + "</p>
       <button class="btn-sm" onclick="runScan()">↻ SCAN AGAIN</button>
-    </div>`;
+    </div>";
 
   document.getElementById("scanner-content").innerHTML=html;
 }
@@ -1300,25 +1292,24 @@ function renderJournal(){
   document.getElementById("j-avg").textContent=avg;
 
   if(journal.length===0){
-    document.getElementById("journal-entries").innerHTML=
-      `<p style="color:#2a3045;font-size:11px;text-align:center;padding:20px">No trades logged yet.</p>`;
+    document.getElementById("journal-entries").innerHTML='<p style="color:#2a3045;font-size:11px;text-align:center;padding:20px">No trades logged yet. Log your first trade above!</p>';
     return;
   }
 
-  document.getElementById("journal-entries").innerHTML=journal.map(e=>`
+  document.getElementById("journal-entries").innerHTML=journal.map(e=>"
     <div class="journal-entry">
       <div class="je-left">
-        <div class="je-ticker">${e.ticker}
-          <span style="font-size:10px;font-weight:400;color:#3a4255;margin-left:8px">${e.shares} shares</span>
+        <div class="je-ticker">" + (e.ticker) + "
+          <span style="font-size:10px;font-weight:400;color:#3a4255;margin-left:8px">" + (e.shares) + " shares</span>
         </div>
         <div class="je-meta">
-          Entry $${e.entry} → Exit $${e.exit} · ${e.date} ${e.time}<br>
-          ${e.notes?`📝 ${e.notes}`:""}
+          Entry $" + (e.entry) + " → Exit $" + (e.exit) + " · " + (e.date) + " " + (e.time) + "<br>
+          ${e.notes?"📝 ${e.notes}":""}
         </div>
       </div>
-      <div class="${e.pnl>=0?"je-win":"je-loss"} je-pnl">${e.pnl>=0?"+":""}\$${e.pnl.toFixed(0)}</div>
-      <button class="je-del" onclick="deleteTrade(${e.id})">🗑</button>
-    </div>`).join("");
+      <div class=(e.pnl>=0?"je-win":"je-loss") + " je-pnl">" + (e.pnl>=0?"+":"") + "\$" + (e.pnl.toFixed(0)) + "</div>
+      <button class="je-del" onclick="deleteTrade(" + (e.id) + ")">🗑</button>
+    </div>").join("");
 }
 
 // ══════════════════════════════════════════════════════
@@ -1330,16 +1321,16 @@ async function testProxy(){
   if(!url){ el.innerHTML='<span style="color:#ff4444">❌ No proxy URL entered in field above</span>'; return; }
   el.innerHTML='<span style="color:#f4c430">⏳ Testing Polygon proxy...</span>';
   try{
-    const resp = await fetch(`${url}/api/stocks?tickers=NVDA`);
+    const resp = await fetch((url) + "/api/stocks?tickers=NVDA");
     const json = await resp.json();
     const s = json.stocks?.[0];
     if(s && s.curr){
-      el.innerHTML=`<span style="color:#00e5a0">✅ POLYGON PROXY WORKING<br>NVDA: $${s.curr} | RSI: ${s.rsi||"pending"} | Vol: ${(s.vol/1e6).toFixed(1)}M</span>`;
+      el.innerHTML="<span style="color:#00e5a0">✅ POLYGON PROXY WORKING<br>NVDA: $" + (s.curr) + " | RSI: " + (s.rsi||"pending") + " | Vol: " + ((s.vol/1e6).toFixed(1)) + "M</span>";
     } else {
-      el.innerHTML=`<span style="color:#ff4444">❌ Proxy responded but no stock data. Check POLYGON_API_KEY in Vercel env vars.<br>Response: ${JSON.stringify(json).slice(0,100)}</span>`;
+      el.innerHTML="<span style="color:#ff4444">❌ Proxy responded but no stock data. Check POLYGON_API_KEY in Vercel env vars.<br>Response: " + (JSON.stringify(json).slice(0,100)) + "</span>";
     }
   }catch(e){
-    el.innerHTML=`<span style="color:#ff4444">❌ Proxy unreachable: ${e.message}<br>Check your Vercel URL is correct and deployed.</span>`;
+    el.innerHTML="<span style="color:#ff4444">❌ Proxy unreachable: " + (e.message) + "<br>Check your Vercel URL is correct and deployed.</span>";
   }
 }
 
@@ -1349,7 +1340,7 @@ async function testClaude(){
   if(!url){ el.innerHTML='<span style="color:#ff4444">❌ No proxy URL entered</span>'; return; }
   el.innerHTML='<span style="color:#f4c430">⏳ Testing Claude proxy... (5-10s)</span>';
   try{
-    const resp = await fetch(`${url}/api/claude`,{
+    const resp = await fetch((url) + "/api/claude",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -1363,18 +1354,18 @@ async function testClaude(){
     console.log("[Test] Status:", resp.status, "Body:", rawText);
     let json;
     try{ json = JSON.parse(rawText); } catch(_){ 
-      el.innerHTML=`<span style="color:#ff4444">❌ Non-JSON response (status ${resp.status}):<br>${rawText.slice(0,300)}</span>`;
+      el.innerHTML="<span style="color:#ff4444">❌ Non-JSON response (status " + (resp.status) + "):<br>" + (rawText.slice(0,300)) + "</span>";
       return;
     }
     if(json.content?.[0]?.text){
-      el.innerHTML=`<span style="color:#00e5a0">✅ CLAUDE WORKING! Response: "${json.content[0].text}"<br>Check console.anthropic.com — you should see usage now.</span>`;
+      el.innerHTML="<span style="color:#00e5a0">✅ CLAUDE WORKING! Response: (json.content[0].text)<br>Check console.anthropic.com — you should see usage now.</span>";
     } else if(json.error?.message){
-      el.innerHTML=`<span style="color:#ff4444">❌ Error: ${json.error.message}<br><br>Full response:<br>${rawText.slice(0,400)}</span>`;
+      el.innerHTML="<span style="color:#ff4444">❌ Error: " + (json.error.message) + "<br><br>Full response:<br>" + (rawText.slice(0,400)) + "</span>";
     } else {
-      el.innerHTML=`<span style="color:#ff4444">❌ Unexpected (status ${resp.status}):<br>${rawText.slice(0,400)}</span>`;
+      el.innerHTML="<span style="color:#ff4444">❌ Unexpected (status " + (resp.status) + "):<br>" + (rawText.slice(0,400)) + "</span>";
     }
   }catch(e){
-    el.innerHTML=`<span style="color:#ff4444">❌ Fetch failed: ${e.message}</span>`;
+    el.innerHTML="<span style="color:#ff4444">❌ Fetch failed: " + (e.message) + "</span>";
   }
 }
 
