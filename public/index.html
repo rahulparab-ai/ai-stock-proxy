@@ -724,7 +724,30 @@ async function runScan(){
   // Filter out SKIP trades
   if(result.trades) result.trades=result.trades.filter(t=>!t.newsFlag?.startsWith("SKIP"));
   currentTrades=result.trades||[];
-  renderResult(result,data);
+  try {
+    renderResult(result,data);
+  } catch(renderErr) {
+    console.error("[Render] Error:", renderErr);
+    // Show raw result so user sees something
+    document.getElementById("scanner-content").innerHTML=`
+      <div style="background:#0c0e16;border:1px solid #1a1f2e;border-radius:10px;padding:16px;">
+        <div style="color:#f4c430;font-size:11px;margin-bottom:10px">⚠ Display error — raw results below</div>
+        <div style="color:#5b8fff;font-size:11px;margin-bottom:6px">Verdict: ${result.verdict||"—"}</div>
+        <div style="color:#4a5568;font-size:11px;margin-bottom:6px">${result.summary||""}</div>
+        <div style="color:#3a4255;font-size:10px;margin-bottom:10px">${result.marketMood||""}</div>
+        ${(result.trades||[]).map(t=>`
+          <div style="background:#080a12;border-radius:6px;padding:10px;margin-bottom:8px;">
+            <span style="color:#f0f4ff;font-weight:800">${t.ticker}</span>
+            <span style="color:#5b8fff;margin-left:8px;font-size:10px">${t.tier||""}</span>
+            <span style="color:#00e5a0;margin-left:8px;font-size:10px">${t.action||""}</span>
+            ${t.entryPrice?`<span style="color:#dde3ee;margin-left:8px;font-size:10px">Entry $${t.entryPrice}</span>`:""}
+            ${t.targetPrice?`<span style="color:#00e5a0;margin-left:8px;font-size:10px">→ $${t.targetPrice}</span>`:""}
+            <div style="color:#4a5568;font-size:10px;margin-top:4px">${t.reason||""}</div>
+          </div>`).join("")}
+        <div style="color:#2a3045;font-size:10px;margin-top:10px">${result.tomorrowWatch||""}</div>
+        <button class="btn-sm" style="margin-top:12px" onclick="runScan()">↻ SCAN AGAIN</button>
+      </div>`;
+  }
   scanning=false;
   btn.disabled=false;
   btn.textContent="▶ SCAN NOW";
@@ -736,9 +759,10 @@ async function runScan(){
 function renderResult(result,data){
   const now      = new Date().toLocaleTimeString();
   const pnlLeft  = Math.max(0, dailyGoal - todayPnL());
-  const buyTrades     = (result.trades||[]).filter(t=>t.tier==="BUY"     && !t.newsFlag?.startsWith("SKIP"));
-  const watchTrades   = (result.trades||[]).filter(t=>t.tier==="WATCHING");
-  const radarTrades   = (result.trades||[]).filter(t=>t.tier==="ON RADAR");
+  const allTrades     = result.trades||[];
+  const buyTrades     = allTrades.filter(t=>t.tier==="BUY"      && !(t.newsFlag||"").startsWith("SKIP"));
+  const watchTrades   = allTrades.filter(t=>t.tier==="WATCHING");
+  const radarTrades   = allTrades.filter(t=>t.tier==="ON RADAR");
   const hasBuys       = buyTrades.length > 0;
 
   // ── VERDICT BANNER ──────────────────────────────────
@@ -757,14 +781,15 @@ function renderResult(result,data){
 
   // ── TIER 1: BUY TRADES ──────────────────────────────
   if(hasBuys){
-    html += `<div style="font-size:9px;color:#00e5a0;letter-spacing:2px;margin:14px 0 8px">🟢 BUY NOW — ${buyTrades.length} SETUP${buyTrades.length>1?"S":""}</div>`;
+    html += '<div style="font-size:9px;color:#00e5a0;letter-spacing:2px;margin:14px 0 8px">🟢 BUY NOW — ' + buyTrades.length + ' SETUP' + (buyTrades.length>1?'S':'') + '</div>';
     buyTrades.forEach((trade,idx)=>{
       const sd         = data[trade.ticker]||{};
       const scoreColor = trade.score>=80?"#00e5a0":trade.score>=65?"#f4c430":"#ff6b6b";
       const riskClass  = trade.riskLevel==="Low"?"pill-low":trade.riskLevel==="Medium"?"pill-med":"pill-hi";
-      const newsClass  = trade.newsFlag?.startsWith("SAFE")?"news-safe":trade.newsFlag?.startsWith("CAUTION")?"news-warn":"news-skip";
+      const nf = trade.newsFlag||"";
+      const newsClass  = nf.startsWith("SAFE")?"news-safe":nf.startsWith("CAUTION")?"news-warn":"news-skip";
       const pos        = calcPosition(trade.entryPrice, trade.targetPrice, trade.stopLoss);
-      const tradeIdx   = (result.trades||[]).indexOf(trade);
+      const tradeIdx   = idx;
       html+=`
         <div class="trade-card">
           <div class="trade-head">
@@ -805,7 +830,7 @@ function renderResult(result,data){
 
   // ── TIER 2: WATCHING ────────────────────────────────
   if(watchTrades.length>0){
-    html+=`<div style="font-size:9px;color:#f4c430;letter-spacing:2px;margin:16px 0 8px">🟡 WATCHING — ${watchTrades.length} APPROACHING SETUP${watchTrades.length>1?"S":""}</div>`;
+    html+='<div style="font-size:9px;color:#f4c430;letter-spacing:2px;margin:16px 0 8px">🟡 WATCHING — ' + watchTrades.length + ' APPROACHING SETUP' + (watchTrades.length>1?'S':'') + '</div>';
     watchTrades.forEach(trade=>{
       const sd=data[trade.ticker]||{};
       html+=`
@@ -830,7 +855,7 @@ function renderResult(result,data){
 
   // ── TIER 3: ON RADAR ────────────────────────────────
   if(radarTrades.length>0){
-    html+=`<div style="font-size:9px;color:#5b8fff;letter-spacing:2px;margin:16px 0 8px">👁 ON RADAR — ${radarTrades.length} TO MONITOR</div>`;
+    html+='<div style="font-size:9px;color:#5b8fff;letter-spacing:2px;margin:16px 0 8px">👁 ON RADAR — ' + radarTrades.length + ' TO MONITOR</div>';
     html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">`;
     radarTrades.forEach(trade=>{
       const sd=data[trade.ticker]||{};
