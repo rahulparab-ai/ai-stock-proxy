@@ -642,6 +642,30 @@ async function runScan(){
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
 
+  // Build exclusion report — why each dipping stock was or wasn't sent to Claude
+  const exclusionReport = movers
+    .filter(s => Math.abs(s.dipPct||0) >= 1.0)
+    .map(s => {
+      const inCombined = combined.find(c => c.ticker === s.ticker);
+      const reasons = [];
+      if (Math.abs(s.dipPct||0) < 1.5) reasons.push("dip only " + s.dipPct + "% (need 1.5%)");
+      if (s.rsi && s.rsi >= 40)         reasons.push("RSI " + s.rsi + " (need <40 for BUY)");
+      if (s.volRatio && s.volRatio < 1.2) reasons.push("vol " + s.volRatio + "x (need 1.2x)");
+      return {
+        ticker:     s.ticker,
+        dipPct:     s.dipPct,
+        rsi:        s.rsi,
+        volRatio:   s.volRatio,
+        curr:       s.curr,
+        sentToClaude: !!inCombined,
+        buyReasons: reasons
+      };
+    })
+    .sort((a,b) => Math.abs(b.dipPct) - Math.abs(a.dipPct));
+  
+  console.log("[Scanner] Exclusion report:", JSON.stringify(exclusionReport));
+  window._lastExclusionReport = exclusionReport;
+
   const promptParts = [
     "Swing trader. Account $" + capital + ". Goal $" + dailyGoal + "/day.",
     "",
@@ -892,6 +916,31 @@ function renderResult(result,data){
         <div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:5px">📅 TOMORROW WATCH</div>
         <div style="font-size:11px;color:#4a5568;line-height:1.7">${result.tomorrowWatch}</div>
       </div>`;
+  }
+
+  // ── SCAN TRANSPARENCY — why stocks were/weren't picked ──
+  const report = window._lastExclusionReport || [];
+  if(report.length > 0){
+    html += '<div style="background:#080a12;border:1px solid #1a1f2e;border-radius:8px;padding:14px;margin-bottom:12px;">';
+    html += '<div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:10px">🔍 SCAN TRANSPARENCY — WHY STOCKS WERE INCLUDED OR EXCLUDED</div>';
+    report.forEach(function(s){
+      const sentColor = s.sentToClaude ? "#00e5a0" : "#ff4444";
+      const sentText  = s.sentToClaude ? "✅ SENT TO CLAUDE" : "❌ FILTERED OUT";
+      html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #0d1020;">';
+      html += '<span style="font-size:12px;font-weight:800;color:#c8d0e8;width:50px;flex-shrink:0">' + s.ticker + '</span>';
+      html += '<div style="flex:1;">';
+      html += '<span style="font-size:9px;color:' + sentColor + ';letter-spacing:1px">' + sentText + '</span>';
+      html += '<div style="font-size:10px;color:#3a4255;margin-top:3px">';
+      html += 'Dip: <span style="color:' + (Math.abs(s.dipPct||0)>=1.5?"#00e5a0":"#ff4444") + '">' + (s.dipPct||0) + '%</span>';
+      html += ' &nbsp; RSI: <span style="color:' + ((s.rsi||99)<40?"#00e5a0":"#ff4444") + '">' + (s.rsi||"N/A") + '</span>';
+      html += ' &nbsp; Vol: <span style="color:' + ((s.volRatio||0)>=1.2?"#00e5a0":"#ff4444") + '">' + (s.volRatio||"N/A") + 'x</span>';
+      html += '</div>';
+      if(!s.sentToClaude && s.buyReasons.length > 0){
+        html += '<div style="font-size:9px;color:#ff444488;margin-top:2px">Blocked: ' + s.buyReasons.join(" · ") + '</div>';
+      }
+      html += '</div></div>';
+    });
+    html += '</div>';
   }
 
   // ── RESCAN BAR ──────────────────────────────────────
