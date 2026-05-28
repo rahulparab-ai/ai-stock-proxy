@@ -629,86 +629,32 @@ async function runScan(){
   ).join("\n");
   const flatList = flatStocks.map(s=>s.ticker).join(", ");
 
-  const prompt=`You are a professional swing trader managing a $${capital} account with a $${dailyGoal}/day profit goal.
-Today's P&L so far: $${pnlToday.toFixed(2)}. Still need: $${Math.max(0,dailyGoal-pnlToday).toFixed(2)} more to hit goal.
-
-Classify EVERY stock in the data into one of three tiers:
-
-TIER 1 — BUY: Stock qualifies RIGHT NOW. ALL must be true:
-- Dip at least 1.5% below previous close
-- RSI below 40 (oversold, not free-falling)
-- Volume at least 1.2x average (capitulation signal)
-- distFromLow > 10% (bounce room exists)
-- Bounce potential of at least 1.5% OR $8 whichever is greater within 1-2 days
-- No negative fundamental catalyst (earnings miss, scandal, etc.)
-
-TIER 2 — WATCHING: Getting close but not ready yet. ANY of:
-- Dip 0.8–1.5%, RSI 40–48 and falling, volume picking up
-- Dip >1.5% but RSI not yet oversold — could trigger by end of day
-- Strong setup forming, needs one more down move to qualify
-Include specific price level that would trigger full BUY signal.
-
-TIER 3 — ON RADAR: Technically strong stock worth monitoring. Either:
-- Trending well but no dip yet — note what price level to watch for entry
-- Recovering from recent dip — could set up again soon
-
-NEWS FILTER: For BUY tier only — check for negative catalysts. If found mark as SKIP.
-
-MOVERS (${movers.length} stocks with activity — analyze these for all 3 tiers):
-${rows}
-
-FLAT TODAY (no movement — mark these as ON RADAR with neutral comment): ${flatList}
-
-Respond ONLY with raw JSON, no markdown, no backticks, start with { end with }:
-{
-  "verdict": "TRADES FOUND" | "WATCHING SETUPS" | "NO TRADES TODAY — STAY CASH",
-  "marketMood": "1 sentence on overall AI sector mood today",
-  "summary": "1-2 sentence explanation of today's conditions",
-  "tomorrowWatch": "1 sentence on what to watch for tomorrow",
-  "trades": [{
-    "ticker": "NVDA",
-    "tier": "BUY",
-    "score": 84,
-    "action": "BUY DIP",
-    "entryPrice": 450.00,
-    "targetPrice": 472.00,
-    "stopLoss": 441.00,
-    "holdDays": "1-2",
-    "reason": "specific RSI/volume/level reason",
-    "newsFlag": "SAFE — dip is technical",
-    "newsSummary": "brief news context",
-    "riskLevel": "Low",
-    "triggerPrice": null
-  },{
-    "ticker": "AMD",
-    "tier": "WATCHING",
-    "score": 62,
-    "action": "WATCH",
-    "entryPrice": null,
-    "targetPrice": null,
-    "stopLoss": null,
-    "holdDays": null,
-    "reason": "RSI at 44 and falling, dip 1.1% — needs RSI below 40 to trigger",
-    "newsFlag": "SAFE — dip is technical",
-    "newsSummary": "No major catalyst",
-    "riskLevel": "Medium",
-    "triggerPrice": 118.50
-  },{
-    "ticker": "MSFT",
-    "tier": "ON RADAR",
-    "score": 45,
-    "action": "MONITOR",
-    "entryPrice": null,
-    "targetPrice": null,
-    "stopLoss": null,
-    "holdDays": null,
-    "reason": "Strong uptrend, watch for pullback to $380 support",
-    "newsFlag": "SAFE",
-    "newsSummary": "No news",
-    "riskLevel": "Low",
-    "triggerPrice": 380.00
-  }]
-}`;
+  // Build prompt as a plain string — avoid template literal issues with special chars
+  const promptParts = [
+    "You are a professional swing trader. Account: $" + capital + ". Daily goal: $" + dailyGoal + ".",
+    "Today P&L: $" + pnlToday.toFixed(2) + ". Still need: $" + Math.max(0,dailyGoal-pnlToday).toFixed(2) + ".",
+    "",
+    "Classify stocks into 3 tiers:",
+    "",
+    "TIER BUY — qualifies RIGHT NOW. ALL required: dip>=1.5%, RSI<40, volume>=1.2x avg, distFromLow>10%, bounce potential>=1.5% or $8. No bad news.",
+    "TIER WATCHING — close but not ready: dip 0.8-1.5% with RSI falling, or dip>1.5% but RSI not yet oversold. Include triggerPrice.",
+    "TIER RADAR — worth monitoring: no dip yet but technically strong. Include watch price level.",
+    "",
+    "ACTIVE STOCKS (" + movers.length + " with movement):",
+    rows,
+    "",
+    "FLAT STOCKS (list as RADAR with note): " + flatList,
+    "",
+    "Return a JSON object with these exact keys:",
+    "verdict (string: TRADES FOUND or WATCHING SETUPS or NO TRADES TODAY)",
+    "marketMood (string: one sentence)",
+    "summary (string: 1-2 sentences)",
+    "tomorrowWatch (string: one sentence)",
+    "trades (array of objects, each with: ticker, tier, score, action, entryPrice, targetPrice, stopLoss, holdDays, reason, newsFlag, newsSummary, riskLevel, triggerPrice)",
+    "",
+    "Output raw JSON only. No explanation. No markdown."
+  ];
+  const prompt = promptParts.join("\n");
 
   let result;
   let claudeError = null;
