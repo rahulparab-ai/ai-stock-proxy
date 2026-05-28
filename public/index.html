@@ -629,30 +629,37 @@ async function runScan(){
   ).join("\n");
   const flatList = flatStocks.map(s=>s.ticker).join(", ");
 
-  // Build prompt as a plain string — avoid template literal issues with special chars
+  // Only send TOP movers to Claude — max 20 stocks to keep response short
+  const topMovers = movers
+    .sort((a,b) => Math.abs(b.dipPct) - Math.abs(a.dipPct))
+    .slice(0, 20);
+  const topRows = topMovers.map(s =>
+    s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x"
+  ).join(", ");
+
   const promptParts = [
-    "You are a professional swing trader. Account: $" + capital + ". Daily goal: $" + dailyGoal + ".",
-    "Today P&L: $" + pnlToday.toFixed(2) + ". Still need: $" + Math.max(0,dailyGoal-pnlToday).toFixed(2) + ".",
+    "Swing trader. Account $" + capital + ". Goal $" + dailyGoal + "/day.",
     "",
-    "Classify stocks into 3 tiers:",
+    "Analyze these stocks and return ONLY the ones worth acting on today.",
+    "BUY criteria: dip>=1.5%, RSI<40, volume>=1.2x, no bad news.",
+    "WATCHING criteria: dip 0.8-1.5% OR RSI 40-48 and falling.",
+    "Skip everything else.",
     "",
-    "TIER BUY — qualifies RIGHT NOW. ALL required: dip>=1.5%, RSI<40, volume>=1.2x avg, distFromLow>10%, bounce potential>=1.5% or $8. No bad news.",
-    "TIER WATCHING — close but not ready: dip 0.8-1.5% with RSI falling, or dip>1.5% but RSI not yet oversold. Include triggerPrice.",
-    "TIER RADAR — worth monitoring: no dip yet but technically strong. Include watch price level.",
+    "DATA: " + topRows,
     "",
-    "ACTIVE STOCKS (" + movers.length + " with movement):",
-    rows,
+    "Return compact JSON only:",
+    "{",
+    "  verdict: TRADES FOUND or WATCHING SETUPS or NO TRADES TODAY,",
+    "  summary: one sentence,",
+    "  marketMood: one sentence,",
+    "  tomorrowWatch: one sentence,",
+    "  trades: [",
+    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, riskLevel, triggerPrice}",
+    "  ]",
+    "}",
     "",
-    "FLAT STOCKS (list as RADAR with note): " + flatList,
-    "",
-    "Return a JSON object with these exact keys:",
-    "verdict (string: TRADES FOUND or WATCHING SETUPS or NO TRADES TODAY)",
-    "marketMood (string: one sentence)",
-    "summary (string: 1-2 sentences)",
-    "tomorrowWatch (string: one sentence)",
-    "trades (array of objects, each with: ticker, tier, score, action, entryPrice, targetPrice, stopLoss, holdDays, reason, newsFlag, newsSummary, riskLevel, triggerPrice)",
-    "",
-    "Output raw JSON only. No explanation. No markdown."
+    "Keep trades array SHORT — max 8 entries. Only include BUY and WATCHING tiers.",
+    "Raw JSON only. No markdown. No explanation."
   ];
   const prompt = promptParts.join("\n");
 
@@ -675,7 +682,7 @@ async function runScan(){
         : { "Content-Type": "application/json", ...(apiKey?{"x-api-key":apiKey,"anthropic-version":"2023-06-01"}:{}) },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 4000,
+        max_tokens: 2000,
         system: "You are a strict swing trading analyst. IMPORTANT: Your entire response must be valid JSON only. Start your response with { and end with }. No words, no explanation, no markdown before or after the JSON. Never force trades. Apply news filter rigorously.",
         messages: [{role:"user", content:prompt}]
       })
@@ -853,23 +860,24 @@ function renderResult(result,data){
     });
   }
 
-  // ── TIER 3: ON RADAR ────────────────────────────────
-  if(radarTrades.length>0){
-    html+='<div style="font-size:9px;color:#5b8fff;letter-spacing:2px;margin:16px 0 8px">👁 ON RADAR — ' + radarTrades.length + ' TO MONITOR</div>';
-    html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">`;
-    radarTrades.forEach(trade=>{
-      const sd=data[trade.ticker]||{};
-      html+=`
-        <div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-            <span style="font-size:14px;font-weight:800;color:#c8d0e8">${trade.ticker}</span>
-            ${sd.curr?`<span style="font-size:11px;color:#3a4255">$${sd.curr}</span>`:""}
-          </div>
-          <div style="font-size:10px;color:#3a4255;line-height:1.6">${trade.reason}</div>
-          ${trade.triggerPrice?`<div style="font-size:9px;color:#5b8fff;margin-top:5px">Watch $${trade.triggerPrice}</div>`:""}
-        </div>`;
+  // ── TIER 3: ON RADAR — built locally from flat stocks ───
+  const localRadar = Object.values(data)
+    .filter(s => Math.abs(s.dipPct||0) < 0.8 && s.curr)
+    .sort((a,b) => (b.volRatio||0) - (a.volRatio||0))
+    .slice(0, 8);
+  if(localRadar.length > 0){
+    html += '<div style="font-size:9px;color:#5b8fff;letter-spacing:2px;margin:16px 0 8px">👁 ON RADAR — ' + localRadar.length + ' FLAT TODAY</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">';
+    localRadar.forEach(function(s){
+      html += '<div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:10px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+      html += '<span style="font-size:13px;font-weight:800;color:#c8d0e8">' + s.ticker + '</span>';
+      html += '<span style="font-size:10px;color:#3a4255">$' + (s.curr||"—") + '</span>';
+      html += '</div>';
+      html += '<div style="font-size:9px;color:#2a3045">RSI ' + (s.rsi||"—") + ' · Vol ' + (s.volRatio||"—") + 'x</div>';
+      html += '</div>';
     });
-    html+=`</div>`;
+    html += '</div>';
   }
 
   // ── TOMORROW WATCH ──────────────────────────────────
