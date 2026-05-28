@@ -629,13 +629,18 @@ async function runScan(){
   ).join("\n");
   const flatList = flatStocks.map(s=>s.ticker).join(", ");
 
-  // Only send TOP movers to Claude — max 20 stocks to keep response short
-  const topMovers = movers
-    .sort((a,b) => Math.abs(b.dipPct) - Math.abs(a.dipPct))
-    .slice(0, 20);
-  const topRows = topMovers.map(s =>
+  // Send to Claude:
+  // Priority 1 — all stocks dipping >=1.5% (these MUST be checked regardless)
+  // Priority 2 — stocks dipping 0.8-1.5% with RSI data (WATCHING candidates)
+  // Cap total at 30 to keep response manageable
+  const mustCheck   = movers.filter(s => Math.abs(s.dipPct||0) >= 1.5);
+  const maybeWatch  = movers.filter(s => Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
+  const combined    = [...mustCheck, ...maybeWatch].slice(0, 30);
+  const topRows = combined.map(s =>
     s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x"
   ).join(", ");
+  console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
+  console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
 
   const promptParts = [
     "Swing trader. Account $" + capital + ". Goal $" + dailyGoal + "/day.",
