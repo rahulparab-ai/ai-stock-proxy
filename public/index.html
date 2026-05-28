@@ -234,13 +234,13 @@
     <div style="display:table;width:100%;border-spacing:6px;margin-bottom:8px;">
       <div style="display:table-row;">
         <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-dip" onclick="setMode('dip')" style="width:100%;background:#0a1a2e;border:2px solid #2d6aff;border-radius:8px;padding:14px 4px;color:#5b8fff;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">DIP &amp; BOUNCE</button>
+          <button id="mode-dip" onclick="try{setMode('dip')}catch(e){alert('Error: '+e.message)}" style="width:100%;background:#0a1a2e;border:2px solid #2d6aff;border-radius:8px;padding:14px 4px;color:#5b8fff;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">DIP &amp; BOUNCE</button>
         </div>
         <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-gap" onclick="setMode('gap')" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">GAP UP</button>
+          <button id="mode-gap" onclick="try{setMode('gap')}catch(e){alert('Error: '+e.message)}" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">GAP UP</button>
         </div>
         <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-both" onclick="setMode('both')" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">BOTH</button>
+          <button id="mode-both" onclick="try{setMode('both')}catch(e){alert('Error: '+e.message)}" style="width:100%;background:#0c0e16;border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">BOTH</button>
         </div>
       </div>
     </div>
@@ -434,22 +434,24 @@ function checkRiskGuard(){
 // ══════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════
-window.onload = ()=>{
-  renderWatchlist();
-  updateHeader();
-  updatePnLBar();
-  renderJournal();
-  checkRiskGuard();
-  setMode(scanMode); // restore last mode
-  if(apiKey)   document.getElementById("api-key-input").value=apiKey;
-  if(proxyUrl){
-    document.getElementById("proxy-url-input").value=proxyUrl;
-    document.getElementById("proxy-url-input").className="setup-input has-val";
-    document.getElementById("proxy-hint").style.display="block";
-  }
-  if(localStorage.getItem("dailyGoal")) document.getElementById("s-goal").value=dailyGoal;
-  if(localStorage.getItem("capital"))   document.getElementById("s-capital").value=capital;
-  if(localStorage.getItem("maxLoss"))   document.getElementById("s-maxloss").value=maxLoss;
+window.onload = function(){
+  try{ renderWatchlist(); }  catch(e){ console.error("renderWatchlist failed:",e); }
+  try{ updateHeader(); }     catch(e){ console.error("updateHeader failed:",e); }
+  try{ updatePnLBar(); }     catch(e){ console.error("updatePnLBar failed:",e); }
+  try{ renderJournal(); }    catch(e){ console.error("renderJournal failed:",e); }
+  try{ checkRiskGuard(); }   catch(e){ console.error("checkRiskGuard failed:",e); }
+  try{ setMode(scanMode); }  catch(e){ console.error("setMode failed:",e); }
+  try{
+    if(apiKey) document.getElementById("api-key-input").value=apiKey;
+    if(proxyUrl){
+      document.getElementById("proxy-url-input").value=proxyUrl;
+      document.getElementById("proxy-url-input").className="setup-input has-val";
+      document.getElementById("proxy-hint").style.display="block";
+    }
+    if(localStorage.getItem("dailyGoal")) document.getElementById("s-goal").value=dailyGoal;
+    if(localStorage.getItem("capital"))   document.getElementById("s-capital").value=capital;
+    if(localStorage.getItem("maxLoss"))   document.getElementById("s-maxloss").value=maxLoss;
+  } catch(e){ console.error("settings restore failed:",e); }
 };
 
 // ══════════════════════════════════════════════════════
