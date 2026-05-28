@@ -618,11 +618,16 @@ async function runScan(){
 
   // 2. Build prompt with news filter + position sizing request
   const pnlToday=todayPnL();
-  const rows=Object.values(data).map(s=>
-    `${s.ticker}: $${s.curr} (prev $${s.prev}), dip $${s.dipDollars} (${s.dipPct}%), `+
-    `RSI ${s.rsi}, vol ${fmtM(s.vol)} vs avg ${fmtM(s.avgVol)} (${s.volRatio}x), `+
-    `52w $${s.week52Low}–$${s.week52High}, ${s.distFromLow}% from 52w low`
+  // Only send stocks with meaningful data to Claude — reduces token usage
+  const allStocks = Object.values(data);
+  const movers = allStocks.filter(s => Math.abs(s.dipPct) >= 0.5 || s.rsi < 50);
+  const flatStocks = allStocks.filter(s => Math.abs(s.dipPct) < 0.5 && (!s.rsi || s.rsi >= 50));
+  const rows = movers.map(s=>
+    `${s.ticker}: $${s.curr} (prev $${s.prev}), dip ${s.dipPct}%, `+
+    `RSI ${s.rsi||"N/A"}, vol ${fmtM(s.vol)} (${s.volRatio}x avg), `+
+    `${s.distFromLow}% from 52w low`
   ).join("\n");
+  const flatList = flatStocks.map(s=>s.ticker).join(", ");
 
   const prompt=`You are a professional swing trader managing a $${capital} account with a $${dailyGoal}/day profit goal.
 Today's P&L so far: $${pnlToday.toFixed(2)}. Still need: $${Math.max(0,dailyGoal-pnlToday).toFixed(2)} more to hit goal.
@@ -649,8 +654,10 @@ TIER 3 — ON RADAR: Technically strong stock worth monitoring. Either:
 
 NEWS FILTER: For BUY tier only — check for negative catalysts. If found mark as SKIP.
 
-TODAY'S DATA (${watchlist.length} stocks):
+MOVERS (${movers.length} stocks with activity — analyze these for all 3 tiers):
 ${rows}
+
+FLAT TODAY (no movement — mark these as ON RADAR with neutral comment): ${flatList}
 
 Respond ONLY with raw JSON, no markdown, no backticks, start with { end with }:
 {
@@ -722,7 +729,7 @@ Respond ONLY with raw JSON, no markdown, no backticks, start with { end with }:
         : { "Content-Type": "application/json", ...(apiKey?{"x-api-key":apiKey,"anthropic-version":"2023-06-01"}:{}) },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1500,
+        max_tokens: 4000,
         system: "You are a strict swing trading analyst. IMPORTANT: Your entire response must be valid JSON only. Start your response with { and end with }. No words, no explanation, no markdown before or after the JSON. Never force trades. Apply news filter rigorously.",
         messages: [{role:"user", content:prompt}]
       })
