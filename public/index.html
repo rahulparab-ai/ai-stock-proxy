@@ -358,7 +358,7 @@
     <div class="setup-card">
       <div class="setup-title" style="color:#f4c430">🔧 CONNECTION TESTER</div>
       <div class="setup-desc">Tap each button to confirm your connections are working before scanning.</div>
-      <button class="save-btn" style="background:#1a1f2e;color:#dde3ee;margin-bottom:8px;width:100%" onclick="testProxy()">TEST POLYGON PROXY →</button>
+      <button class="save-btn" style="background:#1a1f2e;color:#dde3ee;margin-bottom:8px;width:100%" onclick="testProxy()">TEST POLYGON + VOLUME DEBUG →</button>
       <button class="save-btn" style="background:#1a1f2e;color:#dde3ee;margin-bottom:8px;width:100%" onclick="testClaude()">TEST CLAUDE PROXY →</button>
       <div id="test-result" style="margin-top:8px;font-size:11px;line-height:1.8;color:#3a4255"></div>
     </div>
@@ -699,7 +699,54 @@ async function runScan(){
     watchlist.forEach(t=>{data[t]=simulateStock(t);});
   }
 
-  // 2. Build prompt with news filter + position sizing request
+  // 2. SECTOR HEALTH CHECK — runs before Claude, shows market mood
+  var stocksWithRsi = Object.values(data).filter(function(s){ return s.rsi && s.rsi > 0; });
+  var avgRsi = stocksWithRsi.length > 0
+    ? Math.round(stocksWithRsi.reduce(function(sum,s){ return sum+s.rsi; },0) / stocksWithRsi.length) : 55;
+  var stocksDown = Object.values(data).filter(function(s){ return (s.dipPct||0) < 0; });
+  var stocksUp   = Object.values(data).filter(function(s){ return (s.dipPct||0) > 0; });
+  var pctDown    = Math.round((stocksDown.length / Math.max(Object.keys(data).length,1)) * 100);
+  var bigDips    = Object.values(data).filter(function(s){ return Math.abs(s.dipPct||0) >= 3; }).length;
+
+  var sectorMood, sectorColor, sectorAdvice, sectorBg;
+  if(avgRsi >= 65){
+    sectorMood="OVERBOUGHT"; sectorColor="#ff4444"; sectorBg="#140a0a";
+    sectorAdvice="Sector running hot (avg RSI "+avgRsi+"). Stocks falling from overbought often keep falling. Gap Up scanner works better today than Dip scanner.";
+  } else if(avgRsi >= 55){
+    sectorMood="NEUTRAL-BULLISH"; sectorColor="#f4c430"; sectorBg="#1a1000";
+    sectorAdvice="Mixed conditions (avg RSI "+avgRsi+"). Focus on dips with RSI below 50 only. Strong dips 3%+ have best bounce potential.";
+  } else if(avgRsi >= 45){
+    sectorMood="NEUTRAL"; sectorColor="#5b8fff"; sectorBg="#0a0c16";
+    sectorAdvice="Normal market (avg RSI "+avgRsi+"). Good conditions for dip scanning. Follow signals as usual.";
+  } else {
+    sectorMood="OVERSOLD - PRIME DIP ZONE"; sectorColor="#00e5a0"; sectorBg="#001a0f";
+    sectorAdvice="Sector pulling back hard (avg RSI "+avgRsi+"). High probability bounce territory. Trust the dip signals today.";
+  }
+  var recText  = avgRsi >= 65 ? "USE GAP UP TODAY" : avgRsi <= 50 ? "PRIME DIP DAY" : "RUN BOTH";
+  var recColor = avgRsi >= 65 ? "#a855f7" : avgRsi <= 50 ? "#00e5a0" : "#5b8fff";
+
+  var healthHtml = '<div style="background:'+sectorBg+';border:1px solid '+sectorColor+'33;border-radius:10px;padding:16px;margin-bottom:16px;">';
+  healthHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  healthHtml += '<div style="font-size:9px;color:#2a3045;letter-spacing:2px">SECTOR HEALTH</div>';
+  healthHtml += '<div style="font-size:11px;font-weight:800;color:'+sectorColor+'">'+sectorMood+'</div></div>';
+  healthHtml += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">';
+  healthHtml += '<div style="background:#080a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:8px;color:#2a3045;margin-bottom:3px">AVG RSI</div><div style="font-size:16px;font-weight:800;color:'+sectorColor+'">'+avgRsi+'</div></div>';
+  healthHtml += '<div style="background:#080a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:8px;color:#2a3045;margin-bottom:3px">STOCKS DOWN</div><div style="font-size:16px;font-weight:800;color:#ff6b6b">'+pctDown+'%</div></div>';
+  healthHtml += '<div style="background:#080a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:8px;color:#2a3045;margin-bottom:3px">BIG DIPS 3%+</div><div style="font-size:16px;font-weight:800;color:#f4c430">'+bigDips+'</div></div>';
+  healthHtml += '<div style="background:#080a12;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:8px;color:#2a3045;margin-bottom:3px">STOCKS UP</div><div style="font-size:16px;font-weight:800;color:#00e5a0">'+stocksUp.length+'</div></div>';
+  healthHtml += '</div>';
+  healthHtml += '<div style="font-size:11px;color:#4a5568;line-height:1.7;margin-bottom:10px">'+sectorAdvice+'</div>';
+  healthHtml += '<div style="background:'+recColor+'22;border:1px solid '+recColor+'44;border-radius:6px;padding:8px 12px;font-size:10px;color:'+recColor+';font-weight:700;text-align:center;">RECOMMENDATION: '+recText+'</div>';
+  healthHtml += '</div>';
+
+  // Show health card immediately — results will append below it
+  var scEl = document.getElementById("scanner-content");
+  if(scEl) scEl.innerHTML = healthHtml;
+
+  // Pass sector context to Claude
+  var sectorContext = "SECTOR: avg RSI="+avgRsi+" ("+sectorMood+"), "+pctDown+"% stocks down, "+bigDips+" with 3%+ dips, "+stocksUp.length+" stocks up.";
+
+  // 3. Build prompt with news filter + position sizing request
   const pnlToday=todayPnL();
   // Only send stocks with meaningful data to Claude - reduces token usage
   const allStocks = Object.values(data);
@@ -712,8 +759,15 @@ async function runScan(){
   // Priority 1 - all stocks dipping >=1.5% (these MUST be checked regardless)
   // Priority 2 - stocks dipping 0.8-1.5% with RSI data (WATCHING candidates)
   // Cap total at 30 to keep response manageable
-  const mustCheck   = movers.filter(s => Math.abs(s.dipPct||0) >= 1.5);
-  const maybeWatch  = movers.filter(s => Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
+  // Strong dip (3%+) bypasses RSI — size of dip IS the signal
+  // Normal dip (1-3%) needs RSI < 55 to confirm oversold
+  const mustCheck   = movers.filter(function(s){
+    var dip = Math.abs(s.dipPct||0);
+    if(dip >= 3.0) return true; // strong dip always sent
+    if(dip >= 1.0 && (!s.rsi || s.rsi < 55)) return true; // normal dip needs RSI
+    return false;
+  });
+  const maybeWatch  = movers.filter(s => Math.abs(s.dipPct||0) >= 0.5 && Math.abs(s.dipPct||0) < 1.0);
   const combined    = [...mustCheck, ...maybeWatch].slice(0, 30);
   const topRows = combined.map(s =>
     s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x"
@@ -727,9 +781,8 @@ async function runScan(){
     .map(s => {
       const inCombined = combined.find(c => c.ticker === s.ticker);
       const reasons = [];
-      if (Math.abs(s.dipPct||0) < 1.5) reasons.push("dip only " + s.dipPct + "% (need 1.5%)");
-      if (s.rsi && s.rsi >= 40)         reasons.push("RSI " + s.rsi + " (need <40 for BUY)");
-      if (s.volRatio && s.volRatio < 1.2) reasons.push("vol " + s.volRatio + "x (need 1.2x)");
+      if (Math.abs(s.dipPct||0) < 1.0) reasons.push("dip only " + s.dipPct + "% (need 1.0%)");
+      if (s.rsi && s.rsi >= 55 && Math.abs(s.dipPct||0) < 3) reasons.push("RSI " + s.rsi + " (need <55, or dip must be 3%+ to bypass)");
       return {
         ticker:     s.ticker,
         dipPct:     s.dipPct,
@@ -747,10 +800,12 @@ async function runScan(){
 
   const promptParts = [
     "Swing trader. Account $" + capital + ". Goal $" + dailyGoal + "/day.",
+    sectorContext,
     "",
     "Analyze these stocks and return ONLY the ones worth acting on today.",
-    "BUY criteria: dip>=1.5%, RSI<40, volume>=1.2x, no bad news.",
-    "WATCHING criteria: dip 0.8-1.5% OR RSI 40-48 and falling.",
+    "Use the sector health above to calibrate confidence — if sector is OVERBOUGHT, only flag highest conviction dips.",
+    "BUY criteria: TWO paths to qualify. PATH A (Strong Dip): dip >= 3% regardless of RSI — big drops bounce. PATH B (Normal Dip): dip >= 1% AND RSI < 55. Volume filter removed — Polygon avgVol data unreliable. Focus on dip size + RSI + news.",
+    "WATCHING criteria: dip 0.5-1.0% with RSI < 60, OR dip 1-3% with RSI 55-65 (big dip but RSI still high — watch for RSI to fall). Include triggerPrice.",
     "Skip everything else.",
     "",
     "DATA: " + topRows,
@@ -821,7 +876,7 @@ async function runScan(){
     showStatus("Claude error: " + e.message + " - showing demo data", "warn");
 
     // Demo fallback - clearly labelled
-    const q=Object.values(data).filter(s=>Math.abs(s.dipPct)>=1.5&&s.rsi<40&&s.volRatio>=1.2&&s.distFromLow>10);
+    const q=Object.values(data).filter(s=>Math.abs(s.dipPct)>=1.0&&(s.rsi<55||!s.rsi)&&s.distFromLow>10);
     result=q.length===0
       ?{verdict:" DEMO - NO TRADES (Claude offline)",summary:"Claude call failed: " + e.message + ". Fix in Setup tab then rescan.",trades:[]}
       :{verdict:" DEMO DATA - Claude offline",summary:"Claude call failed: " + e.message + ". Results below are simulated, NOT real analysis.",
@@ -908,18 +963,17 @@ async function runGapAnalysis(data) {
   var gapCandidates = Object.values(data).filter(function(s){
     if(!s.curr || !s.prev) return false;
     var gapFromYesterday = ((s.curr - s.prev) / s.prev) * 100;
-    var volOk = isEarly ? (s.volRatio||0) >= 1.5 : (s.volRatio||0) >= 1.2; // 1.5x at open, 1.2x midday continuation
+    // Volume check removed — Polygon avgVol unreliable (shows 1x for everything)
+    // RSI check replaces volume: RSI 50-75 = momentum zone (not overbought, not oversold)
+    var rsiOk = !s.rsi || (s.rsi >= 50 && s.rsi <= 78);
 
     if(isEarly){
-      // Early morning: need gap from yesterday + volume
-      return gapFromYesterday >= 1.5 && s.curr > s.prev && volOk;
+      // Open: fresh gap up 1.5%+ from yesterday, RSI in momentum zone
+      return gapFromYesterday >= 1.5 && s.curr > s.prev && rsiOk;
     } else {
-      // Midday: gap from yesterday ok but check not already extended
-      // We approximate open price as prev * (1 + half the gap)
-      // Real open would come from Polygon intraday - for now use prev as proxy
-      var alreadyMoved = gapFromYesterday;
-      var notExtended  = alreadyMoved < 12; // allow up to 12% — high momentum AI stocks can run further
-      return gapFromYesterday >= 0.5 && s.curr > s.prev && notExtended && volOk;
+      // Midday: up from yesterday, not over-extended (< 12%), RSI not overbought
+      var notExtended = gapFromYesterday < 12;
+      return gapFromYesterday >= 0.5 && s.curr > s.prev && notExtended && rsiOk;
     }
   }).sort(function(a,b){
     var gA = ((a.curr-a.prev)/a.prev)*100;
@@ -956,7 +1010,7 @@ async function runGapAnalysis(data) {
     "Account: $"+capital+". Goal: $"+dailyGoal+"/day.",
     "",
     "STRICT RULES - ALL must be true to flag:",
-    "1. Volume at least 1.5x average - mandatory for gap continuation",
+    "1. RSI between 50-78 — momentum zone, not overbought. RSI above 78 = too extended, skip.",
     "2. RSI between 50-70 - has momentum but not overbought",
     "3. "+maxTarget+" MORE upside from CURRENT price before market close",
     "4. Stock has NOT already run more than 12% from its open today (high-momentum AI stocks like PLTR NVDA can run 8-10% and keep going)",
@@ -1336,16 +1390,54 @@ async function testProxy(){
   var el  = document.getElementById("test-result");
   var url = document.getElementById("proxy-url-input").value.trim().replace(/\/$/,"");
   if(!url){ el.innerHTML='<span style="color:#ff4444">No proxy URL entered</span>'; return; }
-  el.innerHTML='<span style="color:#f4c430">Testing Polygon proxy...</span>';
+  el.innerHTML='<span style="color:#f4c430">Testing Polygon proxy + volume data...</span>';
   try{
-    var resp = await fetch(url+"/api/stocks?tickers=NVDA");
+    var resp = await fetch(url+"/api/stocks?tickers=NVDA,AMD,PLTR");
     var json = await resp.json();
-    var s    = json.stocks && json.stocks[0];
-    if(s && s.curr){
-      el.innerHTML='<span style="color:#00e5a0">POLYGON PROXY WORKING - NVDA: $'+s.curr+' RSI: '+(s.rsi||"--")+' Vol: '+((s.vol/1e6).toFixed(1))+'M</span>';
-    } else {
-      el.innerHTML='<span style="color:#ff4444">Proxy ok but no data. Check POLYGON_API_KEY in Vercel. Response: '+JSON.stringify(json).slice(0,100)+'</span>';
+    var stocks = json.stocks||[];
+
+    if(stocks.length === 0){
+      el.innerHTML='<span style="color:#ff4444">No stocks returned. Check POLYGON_API_KEY in Vercel.</span>';
+      return;
     }
+
+    // Show full raw data for each stock so we can debug volume
+    var html = '<div style="font-size:10px;color:#00e5a0;margin-bottom:8px">POLYGON PROXY WORKING - RAW DATA:</div>';
+    stocks.forEach(function(s){
+      if(s.error){
+        html += '<div style="color:#ff4444;margin-bottom:6px">'+s.ticker+': ERROR - '+s.error+'</div>';
+        return;
+      }
+      var volStatus = (s.volRatio && s.volRatio > 1) ? "color:#00e5a0" : "color:#ff4444";
+      html += '<div style="background:#0a0c16;border-radius:6px;padding:10px;margin-bottom:8px;font-size:10px;">';
+      html += '<div style="font-weight:800;color:#f0f4ff;margin-bottom:6px">'+s.ticker+'</div>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">';
+      html += '<div>Price: <span style="color:#dde3ee">$'+s.curr+'</span></div>';
+      html += '<div>Prev: <span style="color:#dde3ee">$'+s.prev+'</span></div>';
+      html += '<div>Dip: <span style="color:#ff6b6b">'+s.dipPct+'%</span></div>';
+      html += '<div>RSI: <span style="color:#f4c430">'+s.rsi+'</span></div>';
+      html += '<div>Volume: <span style="color:#dde3ee">'+(s.vol?s.vol.toLocaleString():"NULL")+'</span></div>';
+      html += '<div>Avg Vol: <span style="color:#dde3ee">'+(s.avgVol?s.avgVol.toLocaleString():"NULL")+'</span></div>';
+      html += '<div>Vol Ratio: <span style="'+volStatus+'">'+(s.volRatio||"NULL")+'x</span></div>';
+      html += '<div>52w Low%: <span style="color:#dde3ee">'+(s.distFromLow||"NULL")+'%</span></div>';
+      html += '</div>';
+      // Flag the specific issue
+      if(!s.avgVol || s.avgVol === s.vol){
+        html += '<div style="color:#f4c430;margin-top:6px;font-size:9px">WARNING: avgVol = vol (Polygon not returning avg volume field)</div>';
+      }
+      if(s.volRatio === 1 || s.volRatio === 1.0){
+        html += '<div style="color:#ff4444;margin-top:4px;font-size:9px">ISSUE: volRatio = 1x exactly — avgVol field is broken</div>';
+      }
+      html += '</div>';
+    });
+
+    // Show raw JSON for inspection
+    html += '<div style="margin-top:10px;font-size:9px;color:#2a3045">RAW JSON (first stock):</div>';
+    html += '<div style="background:#080a12;border-radius:6px;padding:8px;font-size:9px;color:#3a4255;word-break:break-all;margin-top:4px;">';
+    html += JSON.stringify(stocks[0], null, 2).split('\n').join('<br>').split(' ').join('&nbsp;');
+    html += '</div>';
+
+    el.innerHTML = html;
   }catch(e){
     el.innerHTML='<span style="color:#ff4444">Proxy unreachable: '+e.message+'</span>';
   }
