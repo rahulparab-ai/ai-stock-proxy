@@ -119,8 +119,17 @@ export default async function handler(req, res) {
         ? parseFloat((((curr - week52Low) / todayRange) * 100).toFixed(1))
         : 50;
 
+      const openPrice  = parseFloat((day.o || curr).toFixed(2));
+      const todayHigh  = parseFloat((day.h || curr).toFixed(2));
+      const todayLow   = parseFloat((day.l || curr).toFixed(2));
+      const gapFromOpen = openPrice > 0
+        ? parseFloat((((curr - openPrice) / openPrice) * 100).toFixed(2)) : 0;
+      const fromOpenDollars = parseFloat((curr - openPrice).toFixed(2));
+
       return {
         ticker, curr, prev,
+        openPrice, todayHigh, todayLow,
+        gapFromOpen, fromOpenDollars,
         dipDollars, dipPct,
         rsi:    rsiMap[ticker] ?? null,
         vol,    avgVol, volRatio,
