@@ -1002,7 +1002,8 @@ async function runGapAnalysis(data) {
   // Build prompt with time-aware rules
   var gapRows = gapCandidates.map(function(s){
     var gap = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
-    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"% vol="+s.volRatio+"x RSI="+(s.rsi||"N/A");
+    var openInfo = s.openPrice ? " open=$"+s.openPrice+" high=$"+s.todayHigh+" movedFromOpen="+s.gapFromOpen+"%" : "";
+    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A");
   }).join(", ");
 
   // Time-aware criteria
@@ -1420,13 +1421,15 @@ async function testProxy(){
       html += '<div style="font-weight:800;color:#f0f4ff;margin-bottom:6px">'+s.ticker+'</div>';
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">';
       html += '<div>Price: <span style="color:#dde3ee">$'+s.curr+'</span></div>';
-      html += '<div>Prev: <span style="color:#dde3ee">$'+s.prev+'</span></div>';
-      html += '<div>Dip: <span style="color:#ff6b6b">'+s.dipPct+'%</span></div>';
+      html += '<div>Prev Close: <span style="color:#dde3ee">$'+s.prev+'</span></div>';
+      html += '<div>Open: <span style="color:#5b8fff">$'+(s.openPrice||"N/A")+'</span></div>';
+      html += '<div>Today High: <span style="color:#00e5a0">$'+(s.todayHigh||"N/A")+'</span></div>';
+      html += '<div>Gap from Open: <span style="color:'+(s.gapFromOpen>0?"#00e5a0":"#ff6b6b")+'">'+(s.gapFromOpen||0)+'%</span></div>';
+      html += '<div>Dip from Prev: <span style="color:#ff6b6b">'+s.dipPct+'%</span></div>';
       html += '<div>RSI: <span style="color:#f4c430">'+s.rsi+'</span></div>';
+      html += '<div>Vol Ratio: <span style="'+volStatus+'">'+(s.volRatio||"NULL")+'x</span></div>';
       html += '<div>Volume: <span style="color:#dde3ee">'+(s.vol?s.vol.toLocaleString():"NULL")+'</span></div>';
       html += '<div>Avg Vol: <span style="color:#dde3ee">'+(s.avgVol?s.avgVol.toLocaleString():"NULL")+'</span></div>';
-      html += '<div>Vol Ratio: <span style="'+volStatus+'">'+(s.volRatio||"NULL")+'x</span></div>';
-      html += '<div>52w Low%: <span style="color:#dde3ee">'+(s.distFromLow||"NULL")+'%</span></div>';
       html += '</div>';
       // Flag the specific issue
       if(!s.avgVol || s.avgVol === s.vol){
