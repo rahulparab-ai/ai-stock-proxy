@@ -763,15 +763,17 @@ async function runScan(){
   // Normal dip (1-3%) needs RSI < 55 AND volume >= 1.0x (at least normal activity)
   // Volume now real 30-day avg from Polygon — reliable data
   const mustCheck   = movers.filter(function(s){
-    var dip    = Math.abs(s.dipPct||0);
+    var rawDip = s.dipPct||0;
+    var dip    = Math.abs(rawDip);
     var vol    = s.volRatio||0;
-    var volMin = 0.8; // minimum — filters out stocks with no activity
-    if(!vol || vol < volMin) return false; // skip dead stocks
-    if(dip >= 3.0) return true; // strong dip sent regardless of RSI
-    if(dip >= 1.5 && (!s.rsi || s.rsi < 45)) return true; // normal dip needs RSI < 45
+    var volMin = 0.8;
+    if(!vol || vol < volMin) return false;  // skip illiquid stocks
+    if(rawDip >= 0) return false;           // ONLY stocks going DOWN — positive = Gap Up territory
+    if(dip >= 3.0) return true;             // strong dip bypasses RSI check
+    if(dip >= 1.5 && (!s.rsi || s.rsi <= 45)) return true; // normal dip needs RSI <= 45
     return false;
   });
-  const maybeWatch  = movers.filter(s => Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
+  const maybeWatch  = movers.filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
   const combined    = [...mustCheck, ...maybeWatch].slice(0, 30);
   const topRows = combined.map(s =>
     s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x"
@@ -781,12 +783,12 @@ async function runScan(){
 
   // Build exclusion report - why each dipping stock was or wasn't sent to Claude
   const exclusionReport = movers
-    .filter(s => Math.abs(s.dipPct||0) >= 1.0)
+    .filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 1.0)
     .map(s => {
       const inCombined = combined.find(c => c.ticker === s.ticker);
       const reasons = [];
       if (Math.abs(s.dipPct||0) < 1.0) reasons.push("dip only " + s.dipPct + "% (need 1.0%)");
-      if (s.rsi && s.rsi >= 45 && Math.abs(s.dipPct||0) < 3) reasons.push("RSI " + s.rsi + " (need <45, or dip 3%+ to bypass)");
+      if (s.rsi && s.rsi > 45  && Math.abs(s.dipPct||0) < 3) reasons.push("RSI " + s.rsi + " (need <=45, or dip 3%+ to bypass)");
       if ((s.volRatio||0) < 0.8) reasons.push("vol " + s.volRatio + "x (need 0.8x min - stock too quiet)");
       return {
         ticker:     s.ticker,
@@ -809,7 +811,7 @@ async function runScan(){
     "",
     "Analyze these stocks and return ONLY the ones worth acting on today.",
     "Use the sector health above to calibrate confidence — if sector is OVERBOUGHT, only flag highest conviction dips.",
-    "BUY criteria: TWO paths. PATH A (Strong Dip): dip >= 3% AND volume >= 0.8x. PATH B (Normal Dip): dip >= 1.5% AND RSI < 45 AND volume >= 0.8x. High volume (1.5x+) on a dip = strong reversal — prioritize. RSI < 45 means genuine oversold not just a pullback.",
+    "DIP SCANNER: ONLY flag stocks trading BELOW yesterday close. PATH A: down >= 3% AND vol >= 0.8x. PATH B: down >= 1.5% AND RSI <= 45 AND vol >= 0.8x. Stocks UP today belong in Gap Up scanner. High volume on a DOWN move = bounce signal.",
     "WATCHING criteria: dip 0.8-1.5% with RSI 45-55 and falling, OR dip > 1.5% but RSI 45-60 (not yet oversold). Include exact triggerPrice.",
     "Skip everything else.",
     "",
