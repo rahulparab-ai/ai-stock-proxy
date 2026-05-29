@@ -908,7 +908,7 @@ async function runGapAnalysis(data) {
   var gapCandidates = Object.values(data).filter(function(s){
     if(!s.curr || !s.prev) return false;
     var gapFromYesterday = ((s.curr - s.prev) / s.prev) * 100;
-    var volOk = (s.volRatio||0) >= 1.5; // RULE 3: 1.5x minimum for gaps
+    var volOk = isEarly ? (s.volRatio||0) >= 1.5 : (s.volRatio||0) >= 1.2; // 1.5x at open, 1.2x midday continuation
 
     if(isEarly){
       // Early morning: need gap from yesterday + volume
@@ -918,7 +918,7 @@ async function runGapAnalysis(data) {
       // We approximate open price as prev * (1 + half the gap)
       // Real open would come from Polygon intraday - for now use prev as proxy
       var alreadyMoved = gapFromYesterday;
-      var notExtended  = alreadyMoved < 8; // RULE 1: skip if already moved 8%+ today
+      var notExtended  = alreadyMoved < 12; // allow up to 12% — high momentum AI stocks can run further
       return gapFromYesterday >= 0.5 && s.curr > s.prev && notExtended && volOk;
     }
   }).sort(function(a,b){
@@ -949,7 +949,7 @@ async function runGapAnalysis(data) {
   var maxTarget = minsLeft < 60 ? "$8 minimum (time limited)" : "$15 minimum";
   var timeContext = isEarly
     ? "Market just opened. Look for fresh momentum with full day ahead."
-    : "Midday scan. Only "+minsLeft+" minutes left before 2:30pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 5% from its open today, (2) target is achievable in remaining time, (3) "+maxTarget+" upside still available from CURRENT price.";
+    : "Midday scan. Only "+minsLeft+" minutes left before 2:30pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 10% from open today, (2) RSI not overbought (below 75), (3) "+maxTarget+" upside still available from CURRENT price, (4) volume still above average confirming continuation.";
 
   var gapPromptParts = [
     "You are a momentum trader. "+timeContext,
@@ -959,7 +959,7 @@ async function runGapAnalysis(data) {
     "1. Volume at least 1.5x average - mandatory for gap continuation",
     "2. RSI between 50-70 - has momentum but not overbought",
     "3. "+maxTarget+" MORE upside from CURRENT price before market close",
-    "4. Stock has NOT already run more than 6% from its open today",
+    "4. Stock has NOT already run more than 12% from its open today (high-momentum AI stocks like PLTR NVDA can run 8-10% and keep going)",
     "5. Clear catalyst or sector momentum supporting the move",
     "6. Confidence 85+ only",
     "",
