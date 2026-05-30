@@ -1015,7 +1015,7 @@ async function runGapAnalysis(data) {
   var min      = now.getMinutes();
   var totalMin = hour * 60 + min;
   var marketOpenMin  = 9 * 60 + 30;   // 9:30am
-  var cutoffMin      = 14 * 60 + 30;  // 2:30pm - no new gap entries after this
+  var cutoffMin      = 15 * 60;        // 3:00pm - no new gap entries after this
   var warningMin     = 13 * 60 + 0;   // 1:00pm - show warning
   var isEarly        = totalMin <= marketOpenMin + 30; // within 30min of open
 
@@ -1023,7 +1023,7 @@ async function runGapAnalysis(data) {
   if(totalMin >= cutoffMin){
     return {
       verdict: "TOO LATE FOR GAP TRADES",
-      summary: "It is after 2:30pm. Not enough time left for a gap trade to reach target before 3:30pm close. Use Dip and Bounce scanner instead, or wait for tomorrow open.",
+      summary: "It is after 3:00pm. Not enough time for a safe gap trade entry. Use the 3:30 Check tab to manage existing positions, or wait for tomorrow open.",
       timeMode: "CLOSED",
       tooLate: true,
       setups: []
@@ -1083,7 +1083,7 @@ async function runGapAnalysis(data) {
   var maxTarget = minsLeft < 60 ? "$8 minimum (time limited)" : "$15 minimum";
   var timeContext = isEarly
     ? "Market just opened. Look for fresh momentum with full day ahead."
-    : "Midday scan. Only "+minsLeft+" minutes left before 2:30pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 10% from open today, (2) RSI not overbought (below 75), (3) "+maxTarget+" upside still available from CURRENT price, (4) volume still above average confirming continuation.";
+    : "Midday scan. Only "+minsLeft+" minutes left before 3:00pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 10% from open today, (2) RSI not overbought (below 75), (3) "+maxTarget+" upside still available from CURRENT price, (4) volume still above average confirming continuation.";
 
   var gapPromptParts = [
     "You are a momentum trader. "+timeContext,
