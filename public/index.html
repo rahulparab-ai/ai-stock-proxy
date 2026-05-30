@@ -552,11 +552,13 @@ window.onload = function(){
 // TABS
 //
 function showTab(name){
-  ["scanner","watchlist","journal","setup"].forEach(t=>{
-    document.getElementById("tab-"+t).style.display=t===name?"block":"none";
+  var allTabs = ["scanner","holdcheck","watchlist","journal","setup"];
+  allTabs.forEach(function(t){
+    var el = document.getElementById("tab-"+t);
+    if(el) el.style.display = (t===name?"block":"none");
   });
   document.querySelectorAll(".tab").forEach(function(el,i){
-    el.className="tab"+(["scanner","watchlist","journal","setup"][i]===name?" active":"");
+    el.className = "tab" + (allTabs[i]===name?" active":"");
   });
 }
 
