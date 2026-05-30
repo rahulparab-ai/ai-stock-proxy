@@ -161,6 +161,32 @@
     .capital-row{display:flex;gap:8px;align-items:center;}
     .capital-input{flex:1;background:#080a12;border:1px solid #1a1f2e;border-radius:7px;padding:11px 12px;color:#dde3ee;font-size:13px;outline:none;}
 
+    /* ── HOLD/SELL CHECKER ── */
+    .hs-card{background:#0c0e16;border:1px solid #1a1f2e;border-radius:10px;padding:14px;margin-bottom:10px;}
+    .hs-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+    .hs-ticker{font-size:18px;font-weight:800;color:#f0f4ff;}
+    .hs-hold{background:#00e5a011;border:1px solid #00e5a044;color:#00e5a0;font-size:10px;padding:4px 12px;border-radius:20px;font-weight:700;letter-spacing:1px;}
+    .hs-sell{background:#ff444411;border:1px solid #ff444444;color:#ff4444;font-size:10px;padding:4px 12px;border-radius:20px;font-weight:700;letter-spacing:1px;}
+    .hs-watch{background:#f4c43011;border:1px solid #f4c43044;color:#f4c430;font-size:10px;padding:4px 12px;border-radius:20px;font-weight:700;letter-spacing:1px;}
+    .hs-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;}
+    .hs-cell{background:#080a12;border-radius:6px;padding:8px;}
+    .hs-label{font-size:8px;color:#2a3045;letter-spacing:1.5px;margin-bottom:3px;}
+    .hs-val{font-size:13px;font-weight:700;}
+    .hs-reason{font-size:11px;color:#4a5568;line-height:1.7;margin-bottom:8px;}
+    .hs-overnight{background:#0a1a10;border:1px solid #00e5a033;border-radius:6px;padding:10px;font-size:11px;color:#00e5a0;margin-bottom:6px;}
+    .hs-warning{background:#1a0a0a;border:1px solid #ff444433;border-radius:6px;padding:10px;font-size:11px;color:#ff4444;margin-bottom:6px;}
+    .add-position-form{background:#0c0e16;border:1px solid #1a1f2e;border-radius:10px;padding:14px;margin-bottom:14px;}
+    .ap-title{font-size:10px;color:#5b8fff;letter-spacing:2px;margin-bottom:10px;}
+    .ap-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;}
+    .ap-input{background:#080a12;border:1px solid #1a1f2e;border-radius:6px;padding:9px 10px;color:#dde3ee;font-size:12px;outline:none;width:100%;}
+    .ap-label{font-size:8px;color:#2a3045;letter-spacing:1px;margin-bottom:4px;}
+    .ap-btn{width:100%;background:#2d6aff;border:none;border-radius:7px;padding:11px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;}
+    .position-chip{background:#0c0e16;border:1px solid #1a1f2e;border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+    .pc-ticker{font-size:14px;font-weight:800;color:#f0f4ff;}
+    .pc-detail{font-size:10px;color:#2a3045;margin-top:2px;}
+    .pc-pnl{font-size:14px;font-weight:700;}
+    .pc-rm{background:none;border:none;color:#2a3045;cursor:pointer;font-size:14px;}
+
     /* ── MODE SELECTOR ── */
     .mode-selector{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;}
     .mode-btn{background:#0c0e16;border:1px solid #1a1f2e;border-radius:8px;padding:12px 6px;color:#3a4255;font-size:9px;letter-spacing:1px;cursor:pointer;text-align:center;transition:all 0.15s;font-family:'Courier New',monospace;min-height:64px;-webkit-tap-highlight-color:rgba(0,0,0,0);touch-action:manipulation;}
@@ -223,10 +249,11 @@
 
   <!-- TABS -->
   <div class="tabs">
-    <button class="tab active" onclick="showTab('scanner')">📊 Scanner</button>
-    <button class="tab" onclick="showTab('watchlist')">📋 Watchlist</button>
-    <button class="tab" onclick="showTab('journal')">📒 Journal</button>
-    <button class="tab" onclick="showTab('setup')">⚙ Setup</button>
+    <button class="tab active" onclick="showTab('scanner')">Scanner</button>
+    <button class="tab" onclick="showTab('holdcheck')">3:30 Check</button>
+    <button class="tab" onclick="showTab('watchlist')">Watchlist</button>
+    <button class="tab" onclick="showTab('journal')">Journal</button>
+    <button class="tab" onclick="showTab('setup')">Setup</button>
   </div>
 
   <!-- ═══ SCANNER TAB ═══ -->
@@ -255,6 +282,46 @@
       </div>
     </div>
   </div>
+  <!-- ═══ HOLD/SELL CHECK TAB ═══ -->
+  <div id="tab-holdcheck" style="display:none">
+
+    <!-- Time warning -->
+    <div id="hs-time-banner" style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:12px;margin-bottom:14px;text-align:center;">
+      <div style="font-size:10px;color:#2a3045;letter-spacing:2px;margin-bottom:4px">3:30PM HOLD OR SELL CHECKER</div>
+      <div style="font-size:11px;color:#4a5568">Add stocks you bought this morning. Run check after 3:30pm to decide hold overnight or sell today.</div>
+    </div>
+
+    <!-- Add open position form -->
+    <div class="add-position-form">
+      <div class="ap-title">+ ADD POSITION YOU BOUGHT TODAY</div>
+      <div class="ap-grid">
+        <div>
+          <div class="ap-label">TICKER</div>
+          <input class="ap-input" id="hs-ticker" placeholder="PLTR" maxlength="6"/>
+        </div>
+        <div>
+          <div class="ap-label">SHARES</div>
+          <input class="ap-input" id="hs-shares" type="number" placeholder="13"/>
+        </div>
+        <div>
+          <div class="ap-label">BUY PRICE $</div>
+          <input class="ap-input" id="hs-buyprice" type="number" placeholder="142.00" step="0.01"/>
+        </div>
+      </div>
+      <button class="ap-btn" onclick="addPosition()">ADD POSITION</button>
+    </div>
+
+    <!-- Open positions list -->
+    <div id="open-positions-list"></div>
+
+    <!-- Run check button -->
+    <button id="hs-run-btn" class="btn-scan" onclick="runHoldSellCheck()" style="display:none;background:linear-gradient(135deg,#059669,#047857)">CHECK — HOLD OR SELL?</button>
+
+    <!-- Results -->
+    <div id="hs-results"></div>
+
+  </div>
+
   <!-- ═══ WATCHLIST TAB ═══ -->
   <div id="tab-watchlist" style="display:none">
     <div class="add-row">
@@ -419,7 +486,8 @@ const DEFAULT_WATCHLIST = [
   "SMH","SOXX","BOTZ","CHAT","BILL"
 ];
 
-let scanMode   = localStorage.getItem("scanMode") || "dip"; // dip | gap | both
+let scanMode      = localStorage.getItem("scanMode") || "dip";
+let openPositions = JSON.parse(localStorage.getItem("openPositions")||"[]"); // dip | gap | both
 
 // Version check — if saved watchlist is smaller than default, reset to new default
 var WATCHLIST_VERSION = "v3"; // bump this any time DEFAULT_WATCHLIST grows
@@ -466,6 +534,7 @@ window.onload = function(){
   try{ renderJournal(); }    catch(e){ console.error("renderJournal failed:",e); }
   try{ checkRiskGuard(); }   catch(e){ console.error("checkRiskGuard failed:",e); }
   try{ setMode(scanMode); }  catch(e){ console.error("setMode failed:",e); }
+  try{ renderOpenPositions(); updateHsTimeBanner(); } catch(e){ console.error("positions init failed:",e); }
   try{
     if(apiKey) document.getElementById("api-key-input").value=apiKey;
     if(proxyUrl){
@@ -607,7 +676,7 @@ function setMode(mode){
   var scanBtn = document.getElementById("scan-btn");
   if(scanBtn) scanBtn.style.background = mode==="gap"?"linear-gradient(135deg,#7c3aed,#5b21b6)":mode==="both"?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#2d6aff,#1a45cc)";
   var sc = document.getElementById("scanner-content");
-  if(sc) sc.innerHTML = '<div class="idle"><p>Mode: '+mode.toUpperCase()+'<br>Press SCAN NOW.</p></div>';
+  if(sc) sc.innerHTML = '<div class="idle"><div class="icon">&#128269;</div><p>Mode: <strong>'+mode.toUpperCase()+'</strong><br><br>'+(mode==="gap"?"Best used at 9:31am market open":mode==="both"?"Runs both Dip and Gap Up scanners":"Use any time during market hours")+'<br><br>Press SCAN NOW to start.</p></div>';
 }
 
 //
@@ -1487,6 +1556,182 @@ async function testClaude(){
 //
 // STATUS BAR
 //
+// ══════════════════════════════════════════════════════
+// HOLD / SELL CHECKER FUNCTIONS
+// ══════════════════════════════════════════════════════
+
+function updateHsTimeBanner(){
+  var now=new Date(); var hour=now.getHours(); var min=now.getMinutes();
+  var totalMin=hour*60+min;
+  var banner=document.getElementById("hs-time-banner");
+  if(!banner) return;
+  var checkTime=15*60+30; var marketClose=16*60; var marketOpen=9*60+30;
+  if(totalMin<marketOpen){
+    banner.innerHTML='<div style="font-size:10px;color:#2a3045;letter-spacing:2px;margin-bottom:4px">3:30PM HOLD OR SELL CHECKER</div><div style="font-size:11px;color:#4a5568">Market not open yet. Add positions after 9:31am, run check at 3:30pm.</div>';
+  } else if(totalMin<checkTime){
+    var ml=checkTime-totalMin;
+    banner.innerHTML='<div style="font-size:10px;color:#5b8fff;letter-spacing:2px;margin-bottom:4px">MARKET OPEN - CHECK RUNS AT 3:30PM</div><div style="font-size:11px;color:#4a5568">Add positions you bought this morning. Check available in '+ml+' minutes.</div>';
+  } else if(totalMin<marketClose){
+    var ml2=marketClose-totalMin;
+    banner.style.background="#001a0f"; banner.style.border="1px solid #00e5a033";
+    banner.innerHTML='<div style="font-size:10px;color:#00e5a0;letter-spacing:2px;margin-bottom:4px">3:30PM CHECK READY - '+ml2+' MINS TO CLOSE</div><div style="font-size:11px;color:#4a5568">Run the check now to decide Hold overnight or Sell before 4pm.</div>';
+  } else {
+    banner.innerHTML='<div style="font-size:10px;color:#f4c430;letter-spacing:2px;margin-bottom:4px">MARKET CLOSED</div><div style="font-size:11px;color:#4a5568">Review overnight holds for tomorrow morning open.</div>';
+  }
+}
+
+function addPosition(){
+  var ticker=(document.getElementById("hs-ticker").value||"").trim().toUpperCase();
+  var shares=parseFloat(document.getElementById("hs-shares").value);
+  var buyPrice=parseFloat(document.getElementById("hs-buyprice").value);
+  if(!ticker||isNaN(shares)||isNaN(buyPrice)){ alert("Fill in ticker, shares and buy price."); return; }
+  if(openPositions.find(function(p){ return p.ticker===ticker; })){ alert(ticker+" already added."); return; }
+  openPositions.push({ticker:ticker,shares:shares,buyPrice:buyPrice,addedAt:new Date().toISOString()});
+  localStorage.setItem("openPositions",JSON.stringify(openPositions));
+  document.getElementById("hs-ticker").value="";
+  document.getElementById("hs-shares").value="";
+  document.getElementById("hs-buyprice").value="";
+  renderOpenPositions();
+}
+
+function removePosition(ticker){
+  openPositions=openPositions.filter(function(p){ return p.ticker!==ticker; });
+  localStorage.setItem("openPositions",JSON.stringify(openPositions));
+  renderOpenPositions();
+  document.getElementById("hs-results").innerHTML="";
+}
+
+function renderOpenPositions(){
+  var list=document.getElementById("open-positions-list");
+  var btn=document.getElementById("hs-run-btn");
+  if(!list) return;
+  if(openPositions.length===0){
+    list.innerHTML='<div style="font-size:11px;color:#2a3045;text-align:center;padding:10px 0;margin-bottom:10px">No positions yet. Add stocks you bought this morning.</div>';
+    if(btn) btn.style.display="none";
+    return;
+  }
+  if(btn) btn.style.display="block";
+  var html='<div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:8px">YOUR OPEN POSITIONS TODAY</div>';
+  openPositions.forEach(function(p){
+    html+='<div class="position-chip"><div><div class="pc-ticker">'+p.ticker+'</div>';
+    html+='<div class="pc-detail">'+p.shares+' shares @ $'+p.buyPrice+' = $'+(p.shares*p.buyPrice).toFixed(0)+'</div></div>';
+    html+='<button class="pc-rm" onclick="removePosition(&quot;'+p.ticker+'&quot;)">x</button></div>';
+  });
+  list.innerHTML=html;
+}
+
+async function runHoldSellCheck(){
+  if(openPositions.length===0){ alert("Add positions first."); return; }
+  var now=new Date(); var hour=now.getHours(); var min=now.getMinutes(); var totalMin=hour*60+min;
+  if(totalMin<15*60+30){ var ml=(15*60+30)-totalMin; if(!confirm("Only "+now.toLocaleTimeString()+". Best at 3:30pm ("+ml+" mins away). Run anyway?")) return; }
+  if(totalMin>16*60){ alert("Market closed. This works best 3:30-3:55pm."); }
+  var btn=document.getElementById("hs-run-btn");
+  btn.disabled=true; btn.textContent="ANALYZING...";
+  document.getElementById("hs-results").innerHTML='<div style="text-align:center;padding:30px;color:#059669;font-size:11px;letter-spacing:2px">FETCHING PRICES + ANALYZING...</div>';
+  var tickers=openPositions.map(function(p){ return p.ticker; }).join(",");
+  var liveData={};
+  try{
+    if(proxyUrl){
+      var resp=await fetch(proxyUrl+"/api/stocks?tickers="+tickers+"&bust=1");
+      var json=await resp.json();
+      (json.stocks||[]).forEach(function(s){ if(!s.error) liveData[s.ticker]=s; });
+    }
+  }catch(e){ console.error("Fetch failed:",e); }
+  var positions=openPositions.map(function(p){
+    var live=liveData[p.ticker]||{};
+    var currPrice=live.curr||p.buyPrice;
+    var openPrice=live.openPrice||p.buyPrice;
+    var todayHigh=live.todayHigh||currPrice;
+    var todayLow=live.todayLow||currPrice;
+    var rsi=live.rsi||null;
+    var volRatio=live.volRatio||1;
+    var pnlPer=parseFloat((currPrice-p.buyPrice).toFixed(2));
+    var pnlTotal=parseFloat((pnlPer*p.shares).toFixed(2));
+    var pnlPct=parseFloat(((pnlPer/p.buyPrice)*100).toFixed(2));
+    var dayGain=currPrice-openPrice;
+    var dayHigh=todayHigh-openPrice;
+    var retainPct=dayHigh>0?Math.round((dayGain/dayHigh)*100):100;
+    var dayRange=todayHigh-todayLow;
+    var dayPos=dayRange>0?Math.round(((currPrice-todayLow)/dayRange)*100):50;
+    return {ticker:p.ticker,shares:p.shares,buyPrice:p.buyPrice,currPrice:currPrice,openPrice:openPrice,todayHigh:todayHigh,todayLow:todayLow,rsi:rsi,volRatio:volRatio,pnlPer:pnlPer,pnlTotal:pnlTotal,pnlPct:pnlPct,retainPct:retainPct,dayPos:dayPos};
+  });
+  var posRows=positions.map(function(p){
+    return p.ticker+": bought $"+p.buyPrice+" now $"+p.currPrice+" PnL="+p.pnlPct+"% RSI="+(p.rsi||"N/A")+" vol="+p.volRatio+"x retaining "+p.retainPct+"% of gains price at "+p.dayPos+"% of day range day high=$"+p.todayHigh;
+  }).join(", ");
+  var promptParts=[
+    "Swing trader evaluating open positions at "+now.toLocaleTimeString()+" (near 3:30pm close). Robinhood CASH account.",
+    "Decide HOLD OVERNIGHT or SELL TODAY for each position.",
+    "HOLD if: retaining 50%+ of gains, RSI below 72, vol above 1.0x, price in top 40% of day range, position profitable.",
+    "SELL if: gave back 50%+ of gains, RSI above 75, vol fading below 0.9x, price in bottom 40% of range, or at a loss.",
+    "POSITIONS: "+posRows,
+    "Return JSON: {summary, decisions:[{ticker,decision,confidence,reason,action,estimatedNextOpen,riskLevel}]}",
+    "Raw JSON only."
+  ];
+  var result;
+  try{
+    var claudeUrl=proxyUrl?proxyUrl+"/api/claude":"https://api.anthropic.com/v1/messages";
+    var res=await fetch(claudeUrl,{method:"POST",headers:proxyUrl?{"Content-Type":"application/json"}:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:800,system:"Swing trading exit analyst. Raw JSON only.",messages:[{role:"user",content:promptParts.join("\n")}]})});
+    var raw=await res.json();
+    var text=(raw.content||[]).map(function(c){ return c.text||""; }).join("");
+    var clean=text.replace(/```json|```/g,"").trim();
+    var jS=clean.indexOf("{"); var jE=clean.lastIndexOf("}");
+    result=JSON.parse(clean.slice(jS,jE+1));
+  }catch(e){
+    result={summary:"Demo mode - connect Claude proxy for real analysis.",decisions:positions.map(function(p){
+      var hold=p.pnlPct>0&&p.retainPct>=50&&(!p.rsi||p.rsi<72)&&p.dayPos>=40;
+      return {ticker:p.ticker,decision:hold?"HOLD":"SELL",confidence:hold?78:82,reason:hold?"Retaining "+p.retainPct+"% of gains, price in top of range":"Gave back "+(100-p.retainPct)+"% of gains",action:hold?"Hold overnight - check at 9:31am tomorrow":"Sell before 3:55pm close",estimatedNextOpen:hold?"$"+(p.currPrice*1.01).toFixed(0)+"-$"+(p.currPrice*1.025).toFixed(0):null,riskLevel:hold?"Medium":"Low"};
+    })};
+  }
+  renderHoldSellResults(result,positions);
+  btn.disabled=false; btn.textContent="CHECK - HOLD OR SELL?";
+}
+
+function renderHoldSellResults(result,positions){
+  var html='<div style="background:#0a0c16;border:1px solid #1a1f2e;border-radius:8px;padding:12px;margin-bottom:14px;"><div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:4px">CLAUDE ANALYSIS - '+new Date().toLocaleTimeString()+'</div><div style="font-size:11px;color:#4a5568;line-height:1.7">'+(result.summary||"")+'</div></div>';
+  (result.decisions||[]).forEach(function(d){
+    var pos=positions.find(function(p){ return p.ticker===d.ticker; })||{};
+    var isHold=d.decision==="HOLD"; var isSell=d.decision==="SELL";
+    var cardBorder=isHold?"#00e5a0":isSell?"#ff4444":"#f4c430";
+    var cardBg=isHold?"#001a0f":isSell?"#1a0000":"#1a1000";
+    var pnlColor=(pos.pnlTotal||0)>=0?"#00e5a0":"#ff4444";
+    html+='<div class="hs-card" style="border-left:3px solid '+cardBorder+';background:'+cardBg+';">';
+    html+='<div class="hs-head"><span class="hs-ticker">'+d.ticker+'</span>';
+    html+='<span class="'+(isHold?"hs-hold":isSell?"hs-sell":"hs-watch")+'">'+(isHold?"HOLD OVERNIGHT":isSell?"SELL TODAY":"WATCH")+'</span>';
+    html+='<span style="font-size:9px;color:'+cardBorder+';margin-left:auto">'+d.confidence+'% CONF</span></div>';
+    html+='<div class="hs-grid">';
+    html+='<div class="hs-cell"><div class="hs-label">BOUGHT</div><div class="hs-val" style="color:#dde3ee">$'+pos.buyPrice+'</div></div>';
+    html+='<div class="hs-cell"><div class="hs-label">NOW</div><div class="hs-val" style="color:#dde3ee">$'+pos.currPrice+'</div></div>';
+    html+='<div class="hs-cell"><div class="hs-label">P&L</div><div class="hs-val" style="color:'+pnlColor+'">'+(pos.pnlTotal>=0?"+":"")+pos.pnlTotal+'</div></div>';
+    html+='<div class="hs-cell"><div class="hs-label">RSI</div><div class="hs-val" style="color:'+((pos.rsi||50)<70?"#f4c430":"#ff4444")+'">'+(pos.rsi||"N/A")+'</div></div>';
+    html+='<div class="hs-cell"><div class="hs-label">VOL</div><div class="hs-val" style="color:'+((pos.volRatio||1)>=1?"#00e5a0":"#f4c430")+'">'+(pos.volRatio||"N/A")+'x</div></div>';
+    html+='<div class="hs-cell"><div class="hs-label">RETAIN</div><div class="hs-val" style="color:'+((pos.retainPct||0)>=50?"#00e5a0":"#ff4444")+'">'+(pos.retainPct||"N/A")+'%</div></div>';
+    html+='</div><div class="hs-reason">'+(d.reason||"")+'</div>';
+    if(isHold){
+      html+='<div class="hs-overnight"><div style="font-weight:700;margin-bottom:4px">HOLD OVERNIGHT</div>'+(d.action||"Hold position overnight.");
+      if(d.estimatedNextOpen) html+='<div style="margin-top:6px;font-size:10px">Est tomorrow open: <strong>'+d.estimatedNextOpen+'</strong></div>';
+      html+='<div style="margin-top:6px;font-size:10px;color:#00e5a088">Robinhood: no action needed. Set a limit sell at your target price.</div></div>';
+    } else if(isSell){
+      html+='<div class="hs-warning"><div style="font-weight:700;margin-bottom:4px">SELL TODAY</div>'+(d.action||"Sell before market close.");
+      html+='<div style="margin-top:6px;font-size:10px;color:#ff444488">Robinhood: tap stock, tap Sell, set limit order before 3:55pm.</div></div>';
+    }
+    if(isSell&&(pos.pnlTotal||0)!==0){
+      html+='<button class="log-btn" onclick="logFromHoldCheck(&quot;'+d.ticker+'&quot;,'+pos.shares+','+pos.buyPrice+','+pos.currPrice+')" style="margin-top:6px">+ LOG TRADE TO JOURNAL</button>';
+    }
+    html+='</div>';
+  });
+  html+='<div style="font-size:9px;color:#2a3045;text-align:center;margin-top:10px">Cash account = no PDT. Hold winners overnight, cut losers today.</div>';
+  document.getElementById("hs-results").innerHTML=html;
+}
+
+function logFromHoldCheck(ticker,shares,buyPrice,sellPrice){
+  document.getElementById("j-ticker").value=ticker;
+  document.getElementById("j-shares").value=shares;
+  document.getElementById("j-entry").value=buyPrice;
+  document.getElementById("j-exit").value=sellPrice;
+  showTab("journal");
+  document.getElementById("j-notes").focus();
+}
+
 function showStatus(msg,type){
   const el=document.getElementById("fetch-status");
   if(!msg){el.style.display="none";return;}
