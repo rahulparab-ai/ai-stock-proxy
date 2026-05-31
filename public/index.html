@@ -454,12 +454,12 @@ const DEFAULT_WATCHLIST = [
   // Semiconductor Equipment
   "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","ASMI","AZTA","VECO","UCTT","ICHR","CCMP","COHU","PLAB",
   // EDA & IP
-  "SNPS","CDNS","ANSS","RMBS","CEVA","IDCC",
+  "SNPS","CDNS","RMBS","CEVA","IDCC",
   // Memory & Storage
   "MU","WDC","SNDK","STX",
   // IDMs & Foundries
   "INTC","AVGO","TSM","GFS","UMC","TSEM",
-  "TXN","ADI","ON","MCHP","NXPI","STM","MPWR","SWKS","QRVO","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
+  "TXN","ADI","ON","MCHP","NXPI","STM","MPWR","SWKS","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
   // Raw Materials & Chemicals
   "ENTG","WOLF","COHR","AXTI","LIN","APD","DD","MTRN",
   // Packaging & Test
@@ -467,7 +467,7 @@ const DEFAULT_WATCHLIST = [
   // Storage & Infrastructure Hardware
   "SMCI","DELL","HPE",
   // Cloud & Infrastructure
-  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","JNPR","DOCN","NET",
+  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","DOCN","NET",
   // AI Software & Data
   "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","CFLT","HUBS","GTLB",
   // Cybersecurity
@@ -490,11 +490,11 @@ let scanMode      = localStorage.getItem("scanMode") || "dip";
 let openPositions = JSON.parse(localStorage.getItem("openPositions")||"[]"); // dip | gap | both
 
 // Version check — if saved watchlist is smaller than default, reset to new default
-var WATCHLIST_VERSION = "v3"; // bump this any time DEFAULT_WATCHLIST grows
+var WATCHLIST_VERSION = "v4"; // v4: removed delisted ANSS, JNPR, pending-merger QRVO
 var savedVersion  = localStorage.getItem("watchlistVersion");
 var savedWatchlist= JSON.parse(localStorage.getItem("watchlist")||"null");
 var watchlist;
-if(!savedWatchlist || savedVersion !== WATCHLIST_VERSION || savedWatchlist.length < DEFAULT_WATCHLIST.length){
+if(!savedWatchlist || savedVersion !== WATCHLIST_VERSION){
   watchlist = DEFAULT_WATCHLIST.slice();
   localStorage.setItem("watchlist", JSON.stringify(watchlist));
   localStorage.setItem("watchlistVersion", WATCHLIST_VERSION);
