@@ -452,14 +452,14 @@ const DEFAULT_WATCHLIST = [
   // AI GPUs & Fabless Leaders
   "NVDA","AMD","MRVL","QCOM","ARM","CBRS",
   // Semiconductor Equipment
-  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","AZTA","VECO","UCTT","ICHR","COHU","PLAB",
+  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","ASMI","AZTA","VECO","UCTT","ICHR","CCMP","COHU","PLAB",
   // EDA & IP
-  "SNPS","CDNS","RMBS","CEVA","IDCC",
+  "SNPS","CDNS","ANSS","RMBS","CEVA","IDCC",
   // Memory & Storage
   "MU","WDC","SNDK","STX",
   // IDMs & Foundries
   "INTC","AVGO","TSM","GFS","UMC","TSEM",
-  "TXN","ADI","ON","MCHP","NXPI","STM","MPWR","SWKS","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
+  "TXN","ADI","ON","MCHP","NXPI","STM","MPWR","SWKS","QRVO","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
   // Raw Materials & Chemicals
   "ENTG","WOLF","COHR","AXTI","LIN","APD","DD","MTRN",
   // Packaging & Test
@@ -467,34 +467,34 @@ const DEFAULT_WATCHLIST = [
   // Storage & Infrastructure Hardware
   "SMCI","DELL","HPE",
   // Cloud & Infrastructure
-  "MSFT","AAPL","AMZN","GOOGL","ORCL","IBM","ANET","CSCO","VRT","DOCN","NET",
+  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","JNPR","DOCN","NET",
   // AI Software & Data
-  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","HUBS","GTLB","RDDT",
-  // Crypto & Fintech
-  "COIN",
+  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","CFLT","HUBS","GTLB",
   // Cybersecurity
   "CRWD","PANW","ZS","S",
   // Robotics & Automation
-  "TSLA","PATH","ROK","SYM","ISRG",
+  "TSLA","PATH","ROK","SYM","ARKQ","ISRG",
   // Quantum Computing
   "IONQ","RGTI","QUBT",
   // AI Power & Data Centers
   "APLD","CORZ","IREN","WULF","ETN","GEV","CEG","VST",
+  // AI Applications
+  "SOUN","BBAI",
   // Distribution
   "ARW","AVT","SNX",
   // ETFs
-  "SMH","SOXX","BOTZ","BILL"
+  "SMH","SOXX","BOTZ","CHAT","BILL"
 ];
 
 let scanMode      = localStorage.getItem("scanMode") || "dip";
 let openPositions = JSON.parse(localStorage.getItem("openPositions")||"[]"); // dip | gap | both
 
 // Version check — if saved watchlist is smaller than default, reset to new default
-var WATCHLIST_VERSION = "v7"; // v7: removed CCMP (acquired by Entegris 2022)
+var WATCHLIST_VERSION = "v3"; // bump this any time DEFAULT_WATCHLIST grows
 var savedVersion  = localStorage.getItem("watchlistVersion");
 var savedWatchlist= JSON.parse(localStorage.getItem("watchlist")||"null");
 var watchlist;
-if(!savedWatchlist || savedVersion !== WATCHLIST_VERSION){
+if(!savedWatchlist || savedVersion !== WATCHLIST_VERSION || savedWatchlist.length < DEFAULT_WATCHLIST.length){
   watchlist = DEFAULT_WATCHLIST.slice();
   localStorage.setItem("watchlist", JSON.stringify(watchlist));
   localStorage.setItem("watchlistVersion", WATCHLIST_VERSION);
@@ -743,22 +743,33 @@ async function runScan(){
     '<div class="loading">' +
     '<div class="spinner" style="border-top-color:' + spinColor + '"></div>' +
     '<p style="color:' + spinColor + ';font-size:11px;letter-spacing:2px">' + modeLabel + ' - ' + watchlist.length + ' STOCKS</p>' +
-    '<p style="color:#2a3045;font-size:10px;margin-top:6px">Fetching live prices  Sending to Claude  Analyzing setups</p>' +
+    '<p style="color:#2a3045;font-size:10px;margin-top:6px">Fetching real prices  Sending to Claude  Analyzing setups</p>' +
     '<div class="loadbar"><div class="loadbar-inner" style="background:linear-gradient(90deg,' + spinColor + ',#00e5a0)"></div></div>' +
     '</div>';
 
   // 1. Stock data - fetch for all modes
   const data={};
   if(proxyUrl){
-    showStatus("Fetching live prices from Polygon...","");
+    showStatus("Fetching real prices from Polygon/Massive...","");
     try{
       const resp=await fetch(proxyUrl + "/api/stocks?tickers=" + watchlist.join(","));
       const json=await resp.json();
-      (json.stocks||[]).forEach(s=>{if(!s.error)data[s.ticker]=s;});
-      const failed=(json.stocks||[]).filter(s=>s.error).map(s=>s.ticker);
+      (json.stocks||[]).forEach(s=>{if(!s.error && !s.delisted)data[s.ticker]=s;});
+
+      // Warn about delisted tickers found in response
+      const delisted=(json.stocks||[]).filter(s=>s.delisted).map(s=>s.ticker);
+      if(delisted.length>0) showStatus("⚠️ Dead tickers detected: " + delisted.join(", ") + " — remove from watchlist","warn");
+
+      const failed=(json.stocks||[]).filter(s=>s.error&&!s.delisted).map(s=>s.ticker);
+
+      // Show market status + price source
+      const mktOpen = json.marketOpen;
+      const mktMsg  = mktOpen
+        ? "🟢 MARKET OPEN — live prices (Polygon Starter)"
+        : "🔵 MARKET CLOSED — showing last close prices (Friday close on weekend)";
       showStatus(
-        failed.length?"WARNING Real data loaded. Missing: " + failed.join(", "):"Real prices loaded for " + Object.keys(data).length + " stocks",
-        failed.length?"warn":"ok"
+        failed.length ? "⚠️ Data loaded. Missing: " + failed.join(", ") : mktMsg,
+        failed.length ? "warn" : "ok"
       );
       watchlist.forEach(t=>{if(!data[t])data[t]=simulateStock(t);});
     }catch(e){
@@ -820,39 +831,7 @@ async function runScan(){
   // 3. Build prompt with news filter + position sizing request
   const pnlToday=todayPnL();
   // Only send stocks with meaningful data to Claude - reduces token usage
-  const allStocksRaw = Object.values(data);
-
-  // ── DELISTED GUARD ── flag any tickers the API marked as dead
-  const delistedFound = allStocksRaw.filter(s => s.delisted === true);
-  const suspectPrices = allStocksRaw.filter(s => s.priceSuspect === true);
-
-  if (delistedFound.length > 0 || suspectPrices.length > 0) {
-    var warnEl = document.getElementById("scanner-content");
-    var existingHtml = warnEl ? warnEl.innerHTML : "";
-    var warnHtml = "";
-
-    if (delistedFound.length > 0) {
-      var delistedNames = delistedFound.map(s => s.ticker).join(", ");
-      warnHtml += '<div style="background:#ff000022;border:1px solid #ff4444;border-radius:8px;padding:12px;margin-bottom:12px;">' +
-        '<div style="font-size:10px;font-weight:800;color:#ff4444;margin-bottom:6px">⚠️ DEAD TICKER DETECTED</div>' +
-        '<div style="font-size:11px;color:#ff6666;line-height:1.7">' + delistedNames + ' — zero open price and zero volume today. These tickers appear delisted or acquired. Remove from your watchlist immediately.</div>' +
-        '</div>';
-      console.warn("[Scanner] Delisted tickers detected:", delistedNames);
-    }
-
-    if (suspectPrices.length > 0) {
-      var suspectNames = suspectPrices.map(s => s.ticker + " ($" + s.curr + " vs prev $" + s.prev + ")").join(", ");
-      warnHtml += '<div style="background:#ff880022;border:1px solid #ff8800;border-radius:8px;padding:12px;margin-bottom:12px;">' +
-        '<div style="font-size:10px;font-weight:800;color:#ff8800;margin-bottom:6px">⚠️ STALE PRICE DATA DETECTED</div>' +
-        '<div style="font-size:11px;color:#ffaa44;line-height:1.7">' + suspectNames + ' — current price is 70%+ below yesterday\'s close. Polygon may be returning stale data. Do NOT trade these signals. Try busting cache or re-scanning.</div>' +
-        '</div>';
-      console.warn("[Scanner] Suspect prices:", suspectNames);
-    }
-
-    if (warnEl) warnEl.innerHTML = existingHtml + warnHtml;
-  }
-
-  const allStocks = allStocksRaw.filter(s => !s.delisted && !s.error);
+  const allStocks = Object.values(data);
   const movers = allStocks.filter(s => Math.abs(s.dipPct) >= 0.5 || s.rsi < 50);
   const flatStocks = allStocks.filter(s => Math.abs(s.dipPct) < 0.5 && (!s.rsi || s.rsi >= 50));
   const rows = movers.map(function(s){ return s.ticker+": $"+s.curr+" (prev $"+s.prev+"), dip "+s.dipPct+"%, RSI "+(s.rsi||"N/A")+", vol "+fmtM(s.vol)+" ("+(s.volRatio||0)+"x avg), "+(s.distFromLow||"?")+"%"; }).join("\n");
@@ -871,23 +850,16 @@ async function runScan(){
     var vol    = s.volRatio||0;
     var volMin = 0.8;
     if(!vol || vol < volMin) return false;  // skip illiquid stocks
-    if(rawDip >= 0) return false;           // ONLY stocks going DOWN
+    if(rawDip >= 0) return false;           // ONLY stocks going DOWN — positive = Gap Up territory
     if(dip >= 3.0) return true;             // strong dip bypasses RSI check
     if(dip >= 1.5 && (!s.rsi || s.rsi <= 45)) return true; // normal dip needs RSI <= 45
     return false;
   });
   const maybeWatch  = movers.filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
   const combined    = [...mustCheck, ...maybeWatch].slice(0, 30);
-  const topRows = combined.map(s => {
-    var vwapInfo = s.vwap
-      ? " VWAP=$"+s.vwap+(s.belowVwap?" (price BELOW-VWAP=bounce zone)":" (price ABOVE-VWAP=caution)")
-      : "";
-    var atrInfo = s.atr
-      ? " ATR=$"+s.atr+(s.atrRemainingDollars!==null?" remaining=$"+s.atrRemainingDollars:"")+(s.dipVsAtr!==null?" dipVsATR="+s.dipVsAtr+"x":"")
-      : "";
-    var newsInfo = (s.newsStr && s.newsStr !== "NO_RECENT_NEWS") ? " NEWS=["+s.newsStr+"]" : " NEWS=[none]";
-    return s.ticker+": $"+s.curr+" dip="+s.dipPct+"% RSI="+(s.rsi||"N/A")+" vol="+s.volRatio+"x"+vwapInfo+atrInfo+newsInfo;
-  }).join("\n");
+  const topRows = combined.map(s =>
+    s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x"
+  ).join(", ");
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
 
@@ -921,33 +893,11 @@ async function runScan(){
     "",
     "Analyze these stocks and return ONLY the ones worth acting on today.",
     "Use the sector health above to calibrate confidence — if sector is OVERBOUGHT, only flag highest conviction dips.",
+    "DIP SCANNER: ONLY flag stocks trading BELOW yesterday close. PATH A: down >= 3% AND vol >= 0.8x. PATH B: down >= 1.5% AND RSI <= 45 AND vol >= 0.8x. Stocks UP today belong in Gap Up scanner. High volume on a DOWN move = bounce signal.",
+    "WATCHING criteria: dip 0.8-1.5% with RSI 45-55 and falling, OR dip > 1.5% but RSI 45-60 (not yet oversold). Include exact triggerPrice.",
+    "Skip everything else.",
     "",
-    "DIP BOUNCE RULES — ALL must pass:",
-    "  PATH A (Strong): dip >= 3% AND vol >= 0.8x (bypasses RSI)",
-    "  PATH B (Normal): dip >= 1.5% AND RSI <= 45 AND vol >= 0.8x",
-    "  WATCHING: dip 0.8-1.5% with RSI 45-55 falling, include triggerPrice",
-    "",
-    "VWAP RULES (use to set targetPrice and confirm entry):",
-    "  price BELOW VWAP = oversold vs today's average = stronger bounce signal, use VWAP as target",
-    "  price ABOVE VWAP = already recovered, weaker setup, only flag if dip >= 3% and RSI very low",
-    "  If no VWAP data, estimate target as entry + (dip dollars * 0.6)",
-    "",
-    "ATR RULES (use for target realism and position sizing):",
-    "  ATR = average daily dollar move over 14 days",
-    "  atrRemainingDollars = how much typical daily range is LEFT — this is your realistic max target",
-    "  dipVsATR > 1.5 = stock over-extended, higher bounce probability but also higher risk",
-    "  dipVsATR < 0.5 = small dip relative to ATR, less compelling — needs strong RSI + VWAP signal",
-    "  targetPrice should NEVER exceed entry + atrRemainingDollars (unrealistic)",
-    "  stopLoss = entry - (ATR * 0.3) if ATR available",
-    "",
-    "NEWS FILTER:",
-    "  SKIP — earnings TODAY or TOMORROW, FDA decision, legal/fraud news → remove from trades",
-    "  CAUTION — earnings next week, analyst downgrade → lower confidence 10pts",
-    "  SAFE — no news, positive news, or unrelated news → proceed normally",
-    "If NEWS=[none] treat as SAFE.",
-    "",
-    "DATA (one stock per line):",
-    topRows,
+    "DATA: " + topRows,
     "",
     "Return compact JSON only:",
     "{",
@@ -956,15 +906,11 @@ async function runScan(){
     "  marketMood: one sentence,",
     "  tomorrowWatch: one sentence,",
     "  trades: [",
-    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, newsSummary, riskLevel, triggerPrice, vwapTarget, atrNote}",
+    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, riskLevel, triggerPrice}",
     "  ]",
     "}",
     "",
-    "Keep trades array SHORT - max 8 entries. Only BUY and WATCHING tiers.",
-    "vwapTarget: the VWAP value used as target (or null).",
-    "atrNote: one phrase like 'ATR $12, $8 range remaining' or null.",
-    "newsFlag: SAFE, CAUTION, or SKIP — with brief reason.",
-    "newsSummary: one sentence. If no news: 'No recent news found'.",
+    "Keep trades array SHORT - max 8 entries. Only include BUY and WATCHING tiers.",
     "Raw JSON only. No markdown. No explanation."
   ];
   const prompt = promptParts.join("\n");
@@ -1139,17 +1085,10 @@ async function runGapAnalysis(data) {
 
   // Build prompt with time-aware rules
   var gapRows = gapCandidates.map(function(s){
-    var gap      = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
+    var gap = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
     var openInfo = s.openPrice ? " open=$"+s.openPrice+" high=$"+s.todayHigh+" movedFromOpen="+s.gapFromOpen+"%" : "";
-    var vwapInfo = s.vwap
-      ? " VWAP=$"+s.vwap+(s.belowVwap?" (below-VWAP)":" (above-VWAP=momentum confirmed)")
-      : "";
-    var atrInfo  = s.atr
-      ? " ATR=$"+s.atr+(s.atrRemainingDollars!==null?" remaining=$"+s.atrRemainingDollars:"")
-      : "";
-    var newsInfo = (s.newsStr && s.newsStr !== "NO_RECENT_NEWS") ? " NEWS=["+s.newsStr+"]" : " NEWS=[none]";
-    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A")+vwapInfo+atrInfo+newsInfo;
-  }).join("\n");
+    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A");
+  }).join(", ");
 
   // Time-aware criteria
   var maxTarget = minsLeft < 60 ? "$8 minimum (time limited)" : "$15 minimum";
@@ -1161,36 +1100,19 @@ async function runGapAnalysis(data) {
     "You are a momentum trader. "+timeContext,
     "Account: $"+capital+". Goal: $"+dailyGoal+"/day.",
     "",
-    "STRICT RULES — ALL must be true to flag:",
-    "1. RSI between 50-78 — momentum zone. RSI above 78 = skip (overbought).",
-    "2. Volume at least 1.2x average — confirms institutional buying.",
-    "3. "+maxTarget+" MORE upside from CURRENT price before market close.",
-    "4. Stock has NOT already run more than 12% from open today.",
-    "5. Confidence 85+ only.",
+    "STRICT RULES - ALL must be true to flag:",
+    "1. RSI between 50-78 — momentum zone, not overbought. RSI above 78 = skip.",
+    "2. Volume at least 1.2x average — confirms institutional buying behind the gap.",
+    "2. RSI between 50-70 - has momentum but not overbought",
+    "3. "+maxTarget+" MORE upside from CURRENT price before market close",
+    "4. Stock has NOT already run more than 12% from its open today (high-momentum AI stocks like PLTR NVDA can run 8-10% and keep going)",
+    "5. Clear catalyst or sector momentum supporting the move",
+    "6. Confidence 85+ only",
     "",
-    "VWAP RULES:",
-    "  price ABOVE VWAP = momentum confirmed, institutions net buying — stronger gap signal",
-    "  price BELOW VWAP despite gapping = weak gap, fading fast — lower confidence or skip",
-    "  Use VWAP as first target if above VWAP, second target for extended plays",
-    "",
-    "ATR RULES:",
-    "  ATR = average daily dollar move over 14 days",
-    "  atrRemainingDollars = realistic max upside left today",
-    "  targetPrice must NOT exceed entry + atrRemainingDollars",
-    "  If already moved > 80% of ATR from open → skip, no room left",
-    "",
-    "NEWS FILTER:",
-    "  SKIP if: earnings today/tomorrow, fraud/legal news — do NOT include in setups",
-    "  CAUTION if: earnings next week, analyst downgrade — lower confidence 10pts",
-    "  SAFE if: no news, positive catalyst (earnings beat, contract, upgrade) — HIGHER confidence",
-    "  Gap up WITH positive news catalyst = best possible setup.",
-    "  Gap up WITH negative news = dead cat bounce — SKIP.",
-    "If NEWS=[none] treat as SAFE.",
-    "",
+    "If time is midday, entryPrice = current price right now. Target must be reachable before 3:30pm.",
     "If no stock qualifies return empty setups array.",
     "",
-    "STOCKS (one per line):",
-    gapRows,
+    "STOCKS: "+gapRows,
     "",
     "Return compact JSON only:",
     "{",
@@ -1198,12 +1120,8 @@ async function runGapAnalysis(data) {
     '  "summary": "one sentence",',
     '  "timeMode": "'+timeMode+'",',
     '  "timeWarning": "'+timeWarning+'",',
-    '  setups: [{ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel, newsFlag, newsSummary, vwapTarget, atrNote}]',
+    "  setups: [{ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel}]",
     "}",
-    "vwapTarget: the VWAP value if used as target, else null.",
-    "atrNote: one phrase like 'ATR $18, $11 remaining' or null.",
-    "newsFlag: SAFE, CAUTION, or SKIP — with brief reason.",
-    "newsSummary: one sentence. If no news: 'No recent news found'.",
     "Raw JSON only. No markdown."
   ];
   var gapPrompt = gapPromptParts.join("\n");
@@ -1291,18 +1209,6 @@ function renderGapResult(gapResult, data, container) {
       html += '</div>';
 
       html += '<div class="catalyst-box">CATALYST: '+(setup.catalyst||"Momentum")+'</div>';
-
-      // News badge — real Polygon.io headlines
-      if(setup.newsFlag){
-        var gnf       = setup.newsFlag||"";
-        var gnewsClass= gnf.startsWith("SAFE")?"news-safe":gnf.startsWith("CAUTION")?"news-warn":"news-skip";
-        html += '<div class="'+gnewsClass+'">📰 NEWS (Polygon.io): '+gnf+' — '+(setup.newsSummary||"No recent news found")+'</div>';
-      }
-
-      // ATR + VWAP badges
-      if(setup.atrNote) html += '<div style="font-size:10px;color:#a855f7;background:#1a0a20;border:1px solid #a855f733;border-radius:6px;padding:6px 10px;margin-bottom:8px">📊 ATR: '+setup.atrNote+'</div>';
-      if(setup.vwapTarget) html += '<div style="font-size:10px;color:#5b8fff;background:#080e20;border:1px solid #5b8fff33;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚡ VWAP: $'+setup.vwapTarget+' — momentum confirmed above VWAP</div>';
-
       html += '<div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:10px">'+(setup.reason||"")+'</div>';
 
       html += '<div class="price-grid">';
@@ -1389,13 +1295,9 @@ function renderResult(result,data){
       html += '<span style="font-size:9px;color:#2a3045;margin-left:auto">' + (trade.holdDays||"1-2") + 'd</span>';
       html += '</div>';
       html += '<div class="trade-reason">' + (trade.reason||"") + '</div>';
-      if(trade.atrNote) html += '<div style="font-size:10px;color:#a855f7;background:#1a0a20;border:1px solid #a855f733;border-radius:6px;padding:6px 10px;margin-bottom:8px">📊 ATR: ' + trade.atrNote + '</div>';
-      if(trade.vwapTarget) html += '<div style="font-size:10px;color:#5b8fff;background:#080e20;border:1px solid #5b8fff33;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚡ VWAP TARGET: $' + trade.vwapTarget + ' — bounce target based on today\'s volume-weighted avg price</div>';
-      html += '<div class="' + newsClass + '">📰 NEWS (Polygon.io): ' + (trade.newsFlag||"SAFE") + ' — ' + (trade.newsSummary||"No recent news found") + '</div>';
+      html += '<div class="' + newsClass + '">NEWS: ' + (trade.newsFlag||"") + ' - ' + (trade.newsSummary||"") + '</div>';
       html += '<div class="price-grid">';
-      var priceSourceBadge = sd.priceSource ? ' <span style="font-size:8px;color:#2a3045;background:#0a0c16;border-radius:3px;padding:1px 4px">' + sd.priceSource + '</span>' : '';
-      var priceSuspectStyle = sd.priceSuspect ? 'color:#ff8800' : 'color:#dde3ee';
-      html += '<div class="price-cell"><div class="price-label">CURRENT' + priceSourceBadge + '</div><div class="price-val" style="' + priceSuspectStyle + '">$' + (sd.curr||trade.entryPrice||"--") + (sd.priceSuspect?" ⚠️":"") + '</div></div>';
+      html += '<div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$' + (sd.curr||trade.entryPrice||"--") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">' + (sd.dipPct?sd.dipPct+"%":"--") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:' + ((sd.rsi||50)<35?"#00e5a0":"#f4c430") + '">' + (sd.rsi||"--") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$' + (trade.entryPrice||"--") + '</div></div>';
@@ -1478,10 +1380,18 @@ function renderResult(result,data){
       html += '<span style="font-size:12px;font-weight:800;color:#c8d0e8;width:50px;flex-shrink:0">' + s.ticker + '</span>';
       html += '<div style="flex:1;">';
       html += '<span style="font-size:9px;color:' + sentColor + '">' + (s.sentToClaude?"SENT":"FILTERED") + '</span>';
+      // Current price + price source
+      if(s.curr){
+        var srcColor = (s.priceSource==="last_trade"||s.priceSource==="min_bar") ? "#00e5a0" : (s.priceSource==="prev_close_weekend"?"#5b8fff":"#f4c430");
+        html += ' <span style="font-size:10px;font-weight:800;color:#dde3ee">$' + s.curr + '</span>';
+        html += ' <span style="font-size:8px;color:' + srcColor + '">(' + (s.priceSource||"?") + ')</span>';
+      }
       html += '<div style="font-size:10px;color:#3a4255;margin-top:3px">';
       html += 'Dip: <span style="color:' + (Math.abs(s.dipPct||0)>=1.5?"#00e5a0":"#ff4444") + '">' + (s.dipPct||0) + '%</span>';
       html += ' RSI: <span style="color:' + ((s.rsi||99)<40?"#00e5a0":"#ff4444") + '">' + (s.rsi||"N/A") + '</span>';
       html += ' Vol: <span style="color:' + ((s.volRatio||0)>=1.2?"#00e5a0":"#ff4444") + '">' + (s.volRatio||"N/A") + 'x</span>';
+      if(s.vwap) html += ' VWAP: <span style="color:#5b8fff">$' + s.vwap + '</span>';
+      if(s.atr)  html += ' ATR: <span style="color:#a855f7">$' + s.atr + '</span>';
       html += '</div>';
       if(!s.sentToClaude && s.buyReasons && s.buyReasons.length>0) html += '<div style="font-size:9px;color:#ff444488;margin-top:2px">Blocked: ' + s.buyReasons.join(" - ") + '</div>';
       html += '</div></div>';
@@ -1603,29 +1513,22 @@ async function testProxy(){
       html += '<div style="font-weight:800;color:#f0f4ff;margin-bottom:6px">'+s.ticker+'</div>';
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">';
       html += '<div>Price: <span style="color:#dde3ee">$'+s.curr+'</span></div>';
-      html += '<div style="font-size:9px">Source: <span style="color:#a855f7">'+(s.priceSource||"unknown")+'</span></div>';
       html += '<div>Prev Close: <span style="color:#dde3ee">$'+s.prev+'</span></div>';
-      html += '<div>Dip%: <span style="color:#ff6b6b">'+s.dipPct+'%</span></div>';
       html += '<div>Open: <span style="color:#5b8fff">$'+(s.openPrice||"N/A")+'</span></div>';
       html += '<div>Today High: <span style="color:#00e5a0">$'+(s.todayHigh||"N/A")+'</span></div>';
+      html += '<div>Gap from Open: <span style="color:'+(s.gapFromOpen>0?"#00e5a0":"#ff6b6b")+'">'+(s.gapFromOpen||0)+'%</span></div>';
+      html += '<div>Dip from Prev: <span style="color:#ff6b6b">'+s.dipPct+'%</span></div>';
       html += '<div>RSI: <span style="color:#f4c430">'+s.rsi+'</span></div>';
       html += '<div>Vol Ratio: <span style="'+volStatus+'">'+(s.volRatio||"NULL")+'x</span></div>';
-      html += '<div>VWAP: <span style="color:#5b8fff">$'+(s.vwap||"N/A")+'</span></div>';
-      html += '<div>ATR: <span style="color:#a855f7">$'+(s.atr||"N/A")+'</span></div>';
+      html += '<div>Volume: <span style="color:#dde3ee">'+(s.vol?s.vol.toLocaleString():"NULL")+'</span></div>';
+      html += '<div>Avg Vol: <span style="color:#dde3ee">'+(s.avgVol?s.avgVol.toLocaleString():"NULL")+'</span></div>';
       html += '</div>';
-      // Price suspect warning
-      if(s.priceSuspect){
-        html += '<div style="color:#ff4444;margin-top:6px;font-size:9px;font-weight:800">⚠️ PRICE SUSPECT: $'+s.curr+' vs prev $'+s.prev+' — may be stale</div>';
+      // Flag the specific issue
+      if(!s.avgVol || s.avgVol === s.vol){
+        html += '<div style="color:#f4c430;margin-top:6px;font-size:9px">WARNING: avgVol = vol (Polygon not returning avg volume field)</div>';
       }
-      // Show priceSource warning
-      if(s.priceSource === 'day_close_fallback'){
-        html += '<div style="color:#ff8800;margin-top:4px;font-size:9px">⚠️ USING day.c FALLBACK — lastTrade and min not available. Check Polygon plan.</div>';
-      } else if(s.priceSource === 'todaysChange_calc'){
-        html += '<div style="color:#00e5a0;margin-top:4px;font-size:9px">✓ Price from todaysChange calc (free plan compatible)</div>';
-      } else if(s.priceSource === 'last_trade'){
-        html += '<div style="color:#00e5a0;margin-top:4px;font-size:9px">✓ Price from lastTrade.p (Starter plan live data)</div>';
-      } else if(s.priceSource === 'min_bar'){
-        html += '<div style="color:#00e5a0;margin-top:4px;font-size:9px">✓ Price from min bar (Starter plan live data)</div>';
+      if(s.volRatio === 1 || s.volRatio === 1.0){
+        html += '<div style="color:#ff4444;margin-top:4px;font-size:9px">ISSUE: volRatio = 1x exactly — avgVol field is broken</div>';
       }
       html += '</div>';
     });
