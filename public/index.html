@@ -452,7 +452,7 @@ const DEFAULT_WATCHLIST = [
   // AI GPUs & Fabless Leaders
   "NVDA","AMD","MRVL","QCOM","ARM","CBRS",
   // Semiconductor Equipment
-  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","ASMI","AZTA","VECO","UCTT","ICHR","CCMP","COHU","PLAB",
+  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","AZTA","VECO","UCTT","ICHR","CCMP","COHU","PLAB",
   // EDA & IP
   "SNPS","CDNS","RMBS","CEVA","IDCC",
   // Memory & Storage
@@ -467,30 +467,30 @@ const DEFAULT_WATCHLIST = [
   // Storage & Infrastructure Hardware
   "SMCI","DELL","HPE",
   // Cloud & Infrastructure
-  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","DOCN","NET",
+  "MSFT","AAPL","AMZN","GOOGL","ORCL","IBM","ANET","CSCO","VRT","DOCN","NET",
   // AI Software & Data
-  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","CFLT","HUBS","GTLB",
+  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","HUBS","GTLB","RDDT",
+  // Crypto & Fintech
+  "COIN",
   // Cybersecurity
   "CRWD","PANW","ZS","S",
   // Robotics & Automation
-  "TSLA","PATH","ROK","SYM","ARKQ","ISRG",
+  "TSLA","PATH","ROK","SYM","ISRG",
   // Quantum Computing
   "IONQ","RGTI","QUBT",
   // AI Power & Data Centers
   "APLD","CORZ","IREN","WULF","ETN","GEV","CEG","VST",
-  // AI Applications
-  "SOUN","BBAI",
   // Distribution
   "ARW","AVT","SNX",
   // ETFs
-  "SMH","SOXX","BOTZ","CHAT","BILL"
+  "SMH","SOXX","BOTZ","BILL"
 ];
 
 let scanMode      = localStorage.getItem("scanMode") || "dip";
 let openPositions = JSON.parse(localStorage.getItem("openPositions")||"[]"); // dip | gap | both
 
 // Version check — if saved watchlist is smaller than default, reset to new default
-var WATCHLIST_VERSION = "v4"; // v4: removed delisted ANSS, JNPR, pending-merger QRVO
+var WATCHLIST_VERSION = "v6"; // v6: added COIN, RDDT, AAPL (NOW was already present)
 var savedVersion  = localStorage.getItem("watchlistVersion");
 var savedWatchlist= JSON.parse(localStorage.getItem("watchlist")||"null");
 var watchlist;
