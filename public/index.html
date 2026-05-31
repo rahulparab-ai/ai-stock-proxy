@@ -743,14 +743,14 @@ async function runScan(){
     '<div class="loading">' +
     '<div class="spinner" style="border-top-color:' + spinColor + '"></div>' +
     '<p style="color:' + spinColor + ';font-size:11px;letter-spacing:2px">' + modeLabel + ' - ' + watchlist.length + ' STOCKS</p>' +
-    '<p style="color:#2a3045;font-size:10px;margin-top:6px">Fetching real prices  Sending to Claude  Analyzing setups</p>' +
+    '<p style="color:#2a3045;font-size:10px;margin-top:6px">Fetching live prices  Sending to Claude  Analyzing setups</p>' +
     '<div class="loadbar"><div class="loadbar-inner" style="background:linear-gradient(90deg,' + spinColor + ',#00e5a0)"></div></div>' +
     '</div>';
 
   // 1. Stock data - fetch for all modes
   const data={};
   if(proxyUrl){
-    showStatus("Fetching real prices from Polygon/Massive...","");
+    showStatus("Fetching live prices from Polygon...","");
     try{
       const resp=await fetch(proxyUrl + "/api/stocks?tickers=" + watchlist.join(","));
       const json=await resp.json();
