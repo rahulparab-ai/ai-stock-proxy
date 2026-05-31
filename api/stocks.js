@@ -25,8 +25,9 @@
 const POLY_KEY = process.env.POLYGON_API_KEY;
 const BASE     = "https://api.polygon.io";
 
-let cache = { data: null, ts: 0, newsCache: {} };
-const CACHE_MS      = 10 * 60 * 1000;
+// News cached for 15 mins — headlines don't change every minute, saves API calls
+// Price cache removed — always fetch live prices on every scan, never stale
+let newsCache = {};
 const NEWS_CACHE_MS = 15 * 60 * 1000;
 
 export default async function handler(req, res) {
@@ -34,20 +35,11 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const { tickers, bust } = req.query;
+  const { tickers } = req.query;
   if (!tickers) return res.status(400).json({ error: "No tickers provided" });
 
   const tickerList = tickers.split(",").map(t => t.trim().toUpperCase());
   const now        = Date.now();
-
-  // Return cache if fresh
-  if (!bust && cache.data && (now - cache.ts) < CACHE_MS) {
-    const cached = cache.data.filter(s => tickerList.includes(s.ticker));
-    return res.status(200).json({
-      stocks: cached, fetchedAt: new Date(cache.ts).toISOString(),
-      source: "polygon.io", cached: true,
-    });
-  }
 
   try {
     // ── STEP 1: Snapshot ─────────────────────────────────────────
@@ -115,7 +107,7 @@ export default async function handler(req, res) {
       } catch (_) { avgVolMap[ticker] = null; }
 
       // News — timestamped headlines, safe
-      const newsCacheEntry = cache.newsCache[ticker];
+      const newsCacheEntry = newsCache[ticker];
       if (newsCacheEntry && (now - newsCacheEntry.ts) < NEWS_CACHE_MS) {
         newsMap[ticker] = newsCacheEntry.headlines;
       } else {
@@ -132,7 +124,7 @@ export default async function handler(req, res) {
             sentiment: a.insights?.find(i => i.ticker === ticker)?.sentiment || "neutral",
           }));
           newsMap[ticker] = headlines;
-          cache.newsCache[ticker] = { headlines, ts: now };
+          newsCache[ticker] = { headlines, ts: now };
         } catch (_) { newsMap[ticker] = []; }
       }
 
@@ -269,8 +261,6 @@ export default async function handler(req, res) {
         newsCount: newsHeadlines.length,
       };
     });
-
-    cache = { data: results, ts: now, newsCache: cache.newsCache };
 
     return res.status(200).json({
       stocks:      results,
