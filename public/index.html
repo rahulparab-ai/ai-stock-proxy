@@ -824,16 +824,32 @@ async function runScan(){
 
   // ── DELISTED GUARD ── flag any tickers the API marked as dead
   const delistedFound = allStocksRaw.filter(s => s.delisted === true);
-  if (delistedFound.length > 0) {
-    var delistedNames = delistedFound.map(s => s.ticker).join(", ");
+  const suspectPrices = allStocksRaw.filter(s => s.priceSuspect === true);
+
+  if (delistedFound.length > 0 || suspectPrices.length > 0) {
     var warnEl = document.getElementById("scanner-content");
     var existingHtml = warnEl ? warnEl.innerHTML : "";
-    if (warnEl) warnEl.innerHTML = existingHtml +
-      '<div style="background:#ff000022;border:1px solid #ff4444;border-radius:8px;padding:12px;margin-bottom:12px;">' +
-      '<div style="font-size:10px;font-weight:800;color:#ff4444;margin-bottom:6px">⚠️ DEAD TICKER DETECTED</div>' +
-      '<div style="font-size:11px;color:#ff6666;line-height:1.7">' + delistedNames + ' — zero open price and zero volume today. These tickers appear delisted or acquired. Remove from your watchlist immediately.</div>' +
-      '</div>';
-    console.warn("[Scanner] Delisted tickers detected:", delistedNames);
+    var warnHtml = "";
+
+    if (delistedFound.length > 0) {
+      var delistedNames = delistedFound.map(s => s.ticker).join(", ");
+      warnHtml += '<div style="background:#ff000022;border:1px solid #ff4444;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+        '<div style="font-size:10px;font-weight:800;color:#ff4444;margin-bottom:6px">⚠️ DEAD TICKER DETECTED</div>' +
+        '<div style="font-size:11px;color:#ff6666;line-height:1.7">' + delistedNames + ' — zero open price and zero volume today. These tickers appear delisted or acquired. Remove from your watchlist immediately.</div>' +
+        '</div>';
+      console.warn("[Scanner] Delisted tickers detected:", delistedNames);
+    }
+
+    if (suspectPrices.length > 0) {
+      var suspectNames = suspectPrices.map(s => s.ticker + " ($" + s.curr + " vs prev $" + s.prev + ")").join(", ");
+      warnHtml += '<div style="background:#ff880022;border:1px solid #ff8800;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+        '<div style="font-size:10px;font-weight:800;color:#ff8800;margin-bottom:6px">⚠️ STALE PRICE DATA DETECTED</div>' +
+        '<div style="font-size:11px;color:#ffaa44;line-height:1.7">' + suspectNames + ' — current price is 70%+ below yesterday\'s close. Polygon may be returning stale data. Do NOT trade these signals. Try busting cache or re-scanning.</div>' +
+        '</div>';
+      console.warn("[Scanner] Suspect prices:", suspectNames);
+    }
+
+    if (warnEl) warnEl.innerHTML = existingHtml + warnHtml;
   }
 
   const allStocks = allStocksRaw.filter(s => !s.delisted && !s.error);
@@ -1377,7 +1393,9 @@ function renderResult(result,data){
       if(trade.vwapTarget) html += '<div style="font-size:10px;color:#5b8fff;background:#080e20;border:1px solid #5b8fff33;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚡ VWAP TARGET: $' + trade.vwapTarget + ' — bounce target based on today\'s volume-weighted avg price</div>';
       html += '<div class="' + newsClass + '">📰 NEWS (Polygon.io): ' + (trade.newsFlag||"SAFE") + ' — ' + (trade.newsSummary||"No recent news found") + '</div>';
       html += '<div class="price-grid">';
-      html += '<div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$' + (sd.curr||trade.entryPrice||"--") + '</div></div>';
+      var priceSourceBadge = sd.priceSource ? ' <span style="font-size:8px;color:#2a3045;background:#0a0c16;border-radius:3px;padding:1px 4px">' + sd.priceSource + '</span>' : '';
+      var priceSuspectStyle = sd.priceSuspect ? 'color:#ff8800' : 'color:#dde3ee';
+      html += '<div class="price-cell"><div class="price-label">CURRENT' + priceSourceBadge + '</div><div class="price-val" style="' + priceSuspectStyle + '">$' + (sd.curr||trade.entryPrice||"--") + (sd.priceSuspect?" ⚠️":"") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">' + (sd.dipPct?sd.dipPct+"%":"--") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:' + ((sd.rsi||50)<35?"#00e5a0":"#f4c430") + '">' + (sd.rsi||"--") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#5b8fff">$' + (trade.entryPrice||"--") + '</div></div>';
