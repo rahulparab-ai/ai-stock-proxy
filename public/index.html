@@ -452,7 +452,7 @@ const DEFAULT_WATCHLIST = [
   // AI GPUs & Fabless Leaders
   "NVDA","AMD","MRVL","QCOM","ARM","CBRS",
   // Semiconductor Equipment
-  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","AZTA","VECO","UCTT","ICHR","CCMP","COHU","PLAB",
+  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","AZTA","VECO","UCTT","ICHR","COHU","PLAB",
   // EDA & IP
   "SNPS","CDNS","RMBS","CEVA","IDCC",
   // Memory & Storage
@@ -490,7 +490,7 @@ let scanMode      = localStorage.getItem("scanMode") || "dip";
 let openPositions = JSON.parse(localStorage.getItem("openPositions")||"[]"); // dip | gap | both
 
 // Version check — if saved watchlist is smaller than default, reset to new default
-var WATCHLIST_VERSION = "v6"; // v6: added COIN, RDDT, AAPL (NOW was already present)
+var WATCHLIST_VERSION = "v7"; // v7: removed CCMP (acquired by Entegris 2022)
 var savedVersion  = localStorage.getItem("watchlistVersion");
 var savedWatchlist= JSON.parse(localStorage.getItem("watchlist")||"null");
 var watchlist;
@@ -820,7 +820,23 @@ async function runScan(){
   // 3. Build prompt with news filter + position sizing request
   const pnlToday=todayPnL();
   // Only send stocks with meaningful data to Claude - reduces token usage
-  const allStocks = Object.values(data);
+  const allStocksRaw = Object.values(data);
+
+  // ── DELISTED GUARD ── flag any tickers the API marked as dead
+  const delistedFound = allStocksRaw.filter(s => s.delisted === true);
+  if (delistedFound.length > 0) {
+    var delistedNames = delistedFound.map(s => s.ticker).join(", ");
+    var warnEl = document.getElementById("scanner-content");
+    var existingHtml = warnEl ? warnEl.innerHTML : "";
+    if (warnEl) warnEl.innerHTML = existingHtml +
+      '<div style="background:#ff000022;border:1px solid #ff4444;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+      '<div style="font-size:10px;font-weight:800;color:#ff4444;margin-bottom:6px">⚠️ DEAD TICKER DETECTED</div>' +
+      '<div style="font-size:11px;color:#ff6666;line-height:1.7">' + delistedNames + ' — zero open price and zero volume today. These tickers appear delisted or acquired. Remove from your watchlist immediately.</div>' +
+      '</div>';
+    console.warn("[Scanner] Delisted tickers detected:", delistedNames);
+  }
+
+  const allStocks = allStocksRaw.filter(s => !s.delisted && !s.error);
   const movers = allStocks.filter(s => Math.abs(s.dipPct) >= 0.5 || s.rsi < 50);
   const flatStocks = allStocks.filter(s => Math.abs(s.dipPct) < 0.5 && (!s.rsi || s.rsi >= 50));
   const rows = movers.map(function(s){ return s.ticker+": $"+s.curr+" (prev $"+s.prev+"), dip "+s.dipPct+"%, RSI "+(s.rsi||"N/A")+", vol "+fmtM(s.vol)+" ("+(s.volRatio||0)+"x avg), "+(s.distFromLow||"?")+"%"; }).join("\n");
