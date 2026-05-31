@@ -67,11 +67,10 @@ export default async function handler(req, res) {
     const movers = tickerList.filter(ticker => {
       const snap = snapMap[ticker];
       if (!snap) return false;
-      // FIX: corrected price priority — same logic as Step 4
-      const curr = snap.min?.c || snap.lastTrade?.p || snap.day?.c || 0;
-      const prev = snap.prevDay?.c || 0;
-      if (!curr || !prev) return false;
-      return Math.abs(((curr - prev) / prev) * 100) >= 0.5;
+      // FIX: todaysChangePerc is available on free plan and always current
+      // No need to derive from prices — use it directly
+      const changePct = snap.todaysChangePerc || 0;
+      return Math.abs(changePct) >= 0.5;
     });
 
     // ── STEP 3: RSI + ATR + avgVol + NEWS in parallel ────────────
@@ -147,18 +146,38 @@ export default async function handler(req, res) {
       const day     = snap.day     || {};
       const prevDay = snap.prevDay || {};
 
-      // ── CURRENT PRICE — corrected priority ───────────────────────
-      // min.c     = last 1-minute bar close (most accurate intraday)
-      // lastTrade.p = most recent trade (real-time/15min delayed)
-      // day.c     = last session close (CAN BE STALE — use last resort)
-      const minC      = snap.min?.c       || 0;
-      const lastTP    = snap.lastTrade?.p || 0;
-      const dayC      = day.c             || 0;
-      const curr      = parseFloat((minC || lastTP || dayC || 0).toFixed(2));
-      const priceSource = minC ? "min_bar" : lastTP ? "last_trade" : "day_close";
+      // ── CURRENT PRICE — free plan fix ───────────────────────────
+      // Polygon free plan does NOT include lastTrade or min bar.
+      // day.c accumulates during market hours but can be stale/wrong.
+      // todaysChange IS available on free plan and is always current.
+      // Best approach: use todaysChange + prevDay.c to derive real price.
+      // Fallback chain: todaysChange calc > day.c > lastTrade.p > min.c
+      const prevC     = parseFloat((prevDay.c || 0).toFixed(2));
+      const todayChg  = snap.todaysChange    || null;   // $ change from prev close
+      const todayChgP = snap.todaysChangePerc || null;  // % change from prev close
+      const minC      = snap.min?.c          || 0;
+      const lastTP    = snap.lastTrade?.p    || 0;
+      const dayC      = day.c                || 0;
 
-      // ── PREV CLOSE — safe, official yesterday close ───────────────
-      const prev = parseFloat((prevDay.c || 0).toFixed(2));
+      // Derive current price from todaysChange (most reliable on free plan)
+      let curr = 0;
+      let priceSource = "unknown";
+      if (prevC > 0 && todayChg !== null) {
+        curr = parseFloat((prevC + todayChg).toFixed(2));
+        priceSource = "todaysChange_calc";
+      } else if (minC > 0) {
+        curr = parseFloat(minC.toFixed(2));
+        priceSource = "min_bar";
+      } else if (lastTP > 0) {
+        curr = parseFloat(lastTP.toFixed(2));
+        priceSource = "last_trade";
+      } else if (dayC > 0) {
+        curr = parseFloat(dayC.toFixed(2));
+        priceSource = "day_close_fallback";
+      }
+
+      // prev close = prevDay.c (yesterday's official close — always reliable)
+      const prev = prevC;
 
       // ── VOLUME — day.v is safe (accumulates since open today) ─────
       const vol = Math.floor(day.v || 0);
@@ -181,8 +200,10 @@ export default async function handler(req, res) {
 
       // ── DIP CALCULATIONS ─────────────────────────────────────────
       const dipDollars = parseFloat((prev - curr).toFixed(2));
-      const dipPct     = prev > 0
-        ? parseFloat((((curr - prev) / prev) * 100).toFixed(2)) : 0;
+      // Use todaysChangePerc directly if available — avoids recalculation error
+      const dipPct = todayChgP !== null
+        ? parseFloat(todayChgP.toFixed(2))
+        : (prev > 0 ? parseFloat((((curr - prev) / prev) * 100).toFixed(2)) : 0);
       const volRatio   = avgVol > 0
         ? parseFloat((vol / avgVol).toFixed(2)) : 1;
 
