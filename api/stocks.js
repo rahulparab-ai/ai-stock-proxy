@@ -143,6 +143,19 @@ export default async function handler(req, res) {
       const prev    = parseFloat((prevDay.c || 0).toFixed(2));
       const vol     = Math.floor(day.v || 0);
 
+      // ── DELISTED GUARD ───────────────────────────────────────────
+      // A live stock always has today's open price and volume.
+      // Delisted/acquired tickers return stale Polygon data with
+      // zero open AND zero volume — flag and skip them entirely.
+      const openToday = day.o || 0;
+      if (openToday === 0 && vol === 0) {
+        return {
+          ticker,
+          delisted: true,
+          error: `DELISTED_OR_INACTIVE: no open price and zero volume today. Remove from watchlist.`,
+        };
+      }
+
       const avgVol  = avgVolMap[ticker]
         || Math.floor(snap.prevDay?.v || vol || 1);
 
