@@ -1,17 +1,33 @@
 // ─────────────────────────────────────────────────────────────────
-// Vercel Serverless Function — Stock Data Proxy (Polygon / Massive)
-// v3: VWAP (from snapshot), ATR (14d), real news headlines added
-//     VWAP = intraday price target for bounces
-//     ATR  = avg daily $ range, used for position sizing + room-to-run
+// Vercel Serverless Function — Stock Data Proxy (Polygon)
+// v4: Full Polygon field audit — all staleness issues fixed
+//
+// FIELD AUDIT RESULTS:
+// ┌─────────────────┬──────────────────┬────────────────────────────┐
+// │ Field           │ Risk             │ Fix                        │
+// ├─────────────────┼──────────────────┼────────────────────────────┤
+// │ day.c           │ STALE (was bug)  │ Use min.c > lastTrade.p    │
+// │ prevDay.c       │ SAFE             │ Official yesterday close   │
+// │ day.o           │ SAFE             │ Today's open, set at 9:30  │
+// │ day.h / day.l   │ SAFE             │ Today's running high/low   │
+// │ day.v           │ SAFE             │ Accumulated today volume   │
+// │ day.vw (VWAP)   │ MILD RISK        │ Accumulates since open     │
+// │ prevDay.v       │ SAFE             │ Yesterday final volume     │
+// │ lastTrade.p     │ BEST PRICE       │ Most recent trade price    │
+// │ min.c           │ BEST INTRADAY    │ Last 1-min bar close       │
+// │ RSI (indicator) │ LAGGING (1 day)  │ Based on prev close, OK    │
+// │ ATR (indicator) │ LAGGING (14 day) │ Historical, OK for sizing  │
+// │ avgVol (aggs)   │ SAFE             │ 30-day historical, correct │
+// │ news            │ SAFE             │ Timestamped, 3-day window  │
+// └─────────────────┴──────────────────┴────────────────────────────┘
 // ─────────────────────────────────────────────────────────────────
 
 const POLY_KEY = process.env.POLYGON_API_KEY;
 const BASE     = "https://api.polygon.io";
 
-// Cache for 10 minutes
 let cache = { data: null, ts: 0, newsCache: {} };
 const CACHE_MS      = 10 * 60 * 1000;
-const NEWS_CACHE_MS = 15 * 60 * 1000; // news cached 15 mins separately
+const NEWS_CACHE_MS = 15 * 60 * 1000;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -34,7 +50,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ── STEP 1: Snapshot — price, today vol, prev close ───────────
+    // ── STEP 1: Snapshot ─────────────────────────────────────────
     const snapUrl =
       `${BASE}/v2/snapshot/locale/us/markets/stocks/tickers` +
       `?tickers=${tickerList.join(",")}&apiKey=${POLY_KEY}`;
@@ -42,7 +58,8 @@ export default async function handler(req, res) {
     const snapMap  = {};
     (snapData.tickers || []).forEach(t => { snapMap[t.ticker] = t; });
 
-    // ── STEP 2: Identify movers for RSI + avgVol + NEWS ───────────
+    // ── STEP 2: Identify movers ───────────────────────────────────
+    // FIX: Use same corrected price priority here too (not just in Step 4)
     const today = new Date();
     const from  = new Date(today - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     const to    = today.toISOString().split("T")[0];
@@ -50,13 +67,14 @@ export default async function handler(req, res) {
     const movers = tickerList.filter(ticker => {
       const snap = snapMap[ticker];
       if (!snap) return false;
-      const curr = snap.day?.c || snap.lastTrade?.p || 0;
+      // FIX: corrected price priority — same logic as Step 4
+      const curr = snap.min?.c || snap.lastTrade?.p || snap.day?.c || 0;
       const prev = snap.prevDay?.c || 0;
       if (!curr || !prev) return false;
       return Math.abs(((curr - prev) / prev) * 100) >= 0.5;
     });
 
-    // ── STEP 3: Fetch RSI + ATR + avgVol + NEWS in parallel ──────
+    // ── STEP 3: RSI + ATR + avgVol + NEWS in parallel ────────────
     const rsiMap    = {};
     const atrMap    = {};
     const avgVolMap = {};
@@ -64,7 +82,7 @@ export default async function handler(req, res) {
 
     await Promise.all(movers.map(async ticker => {
 
-      // RSI
+      // RSI — uses daily closes, 1-day lag is acceptable for swing trading
       try {
         const rsiUrl =
           `${BASE}/v1/indicators/rsi/${ticker}` +
@@ -74,7 +92,7 @@ export default async function handler(req, res) {
         rsiMap[ticker] = val ? parseFloat(val.toFixed(1)) : null;
       } catch (_) { rsiMap[ticker] = null; }
 
-      // ATR (14-day Average True Range) — real average daily dollar move
+      // ATR — 14-day historical, acceptable for position sizing
       try {
         const atrUrl =
           `${BASE}/v1/indicators/atr/${ticker}` +
@@ -84,10 +102,7 @@ export default async function handler(req, res) {
         atrMap[ticker] = atrVal ? parseFloat(atrVal.toFixed(2)) : null;
       } catch (_) { atrMap[ticker] = null; }
 
-      // VWAP — already in Polygon snapshot day.vw, extracted below in results
-      // (no extra API call needed)
-
-      // Real 30-day average volume
+      // avgVol — 30-day historical daily bars, safe and accurate
       try {
         const aggUrl =
           `${BASE}/v2/aggs/ticker/${ticker}/range/1/day/${from}/${to}` +
@@ -100,34 +115,26 @@ export default async function handler(req, res) {
         }
       } catch (_) { avgVolMap[ticker] = null; }
 
-      // ── NEWS: Fetch last 2 headlines from Polygon news API ──────
-      // Uses cache to avoid hammering news API on every scan
+      // News — timestamped headlines, safe
       const newsCacheEntry = cache.newsCache[ticker];
       if (newsCacheEntry && (now - newsCacheEntry.ts) < NEWS_CACHE_MS) {
         newsMap[ticker] = newsCacheEntry.headlines;
       } else {
         try {
-          // published_utc.gte = today minus 3 days to catch weekend news
           const threeDaysAgo = new Date(today - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
           const newsUrl =
             `${BASE}/v2/reference/news` +
             `?ticker=${ticker}&published_utc.gte=${threeDaysAgo}&order=desc&limit=2&apiKey=${POLY_KEY}`;
           const newsJson = await (await fetch(newsUrl)).json();
           const articles = newsJson.results || [];
-
-          // Extract just what Claude needs: title + published date
           const headlines = articles.map(a => ({
             title:     a.title || "",
             published: a.published_utc ? a.published_utc.slice(0, 10) : "",
             sentiment: a.insights?.find(i => i.ticker === ticker)?.sentiment || "neutral",
           }));
-
           newsMap[ticker] = headlines;
-          // Store in news cache
           cache.newsCache[ticker] = { headlines, ts: now };
-        } catch (_) {
-          newsMap[ticker] = [];
-        }
+        } catch (_) { newsMap[ticker] = []; }
       }
 
     }));
@@ -139,65 +146,83 @@ export default async function handler(req, res) {
 
       const day     = snap.day     || {};
       const prevDay = snap.prevDay || {};
-      const curr    = parseFloat((day.c || snap.lastTrade?.p || 0).toFixed(2));
-      const prev    = parseFloat((prevDay.c || 0).toFixed(2));
-      const vol     = Math.floor(day.v || 0);
+
+      // ── CURRENT PRICE — corrected priority ───────────────────────
+      // min.c     = last 1-minute bar close (most accurate intraday)
+      // lastTrade.p = most recent trade (real-time/15min delayed)
+      // day.c     = last session close (CAN BE STALE — use last resort)
+      const minC      = snap.min?.c       || 0;
+      const lastTP    = snap.lastTrade?.p || 0;
+      const dayC      = day.c             || 0;
+      const curr      = parseFloat((minC || lastTP || dayC || 0).toFixed(2));
+      const priceSource = minC ? "min_bar" : lastTP ? "last_trade" : "day_close";
+
+      // ── PREV CLOSE — safe, official yesterday close ───────────────
+      const prev = parseFloat((prevDay.c || 0).toFixed(2));
+
+      // ── VOLUME — day.v is safe (accumulates since open today) ─────
+      const vol = Math.floor(day.v || 0);
 
       // ── DELISTED GUARD ───────────────────────────────────────────
-      // A live stock always has today's open price and volume.
-      // Delisted/acquired tickers return stale Polygon data with
-      // zero open AND zero volume — flag and skip them entirely.
       const openToday = day.o || 0;
       if (openToday === 0 && vol === 0) {
         return {
-          ticker,
-          delisted: true,
-          error: `DELISTED_OR_INACTIVE: no open price and zero volume today. Remove from watchlist.`,
+          ticker, delisted: true,
+          error: "DELISTED_OR_INACTIVE: no open price and zero volume. Remove from watchlist.",
         };
       }
 
-      const avgVol  = avgVolMap[ticker]
-        || Math.floor(snap.prevDay?.v || vol || 1);
+      // ── PRICE SANITY CHECK ───────────────────────────────────────
+      // curr more than 70% below prev = almost certainly stale/wrong
+      const priceSuspect = prev > 0 && curr > 0 && curr < (prev * 0.30);
 
+      // ── AVERAGE VOLUME — 30-day historical (safe) ─────────────────
+      const avgVol = avgVolMap[ticker] || Math.floor(prevDay.v || vol || 1);
+
+      // ── DIP CALCULATIONS ─────────────────────────────────────────
       const dipDollars = parseFloat((prev - curr).toFixed(2));
       const dipPct     = prev > 0
         ? parseFloat((((curr - prev) / prev) * 100).toFixed(2)) : 0;
       const volRatio   = avgVol > 0
         ? parseFloat((vol / avgVol).toFixed(2)) : 1;
 
-      const week52High = parseFloat((snap.day?.h || curr * 1.3).toFixed(2));
-      const week52Low  = parseFloat((snap.day?.l || curr * 0.7).toFixed(2));
-      const todayRange = week52High - week52Low;
-      const distFromLow = todayRange > 0
-        ? parseFloat((((curr - week52Low) / todayRange) * 100).toFixed(1))
-        : 50;
-
-      const openPrice      = parseFloat((day.o || curr).toFixed(2));
-      const todayHigh      = parseFloat((day.h || curr).toFixed(2));
-      const todayLow       = parseFloat((day.l || curr).toFixed(2));
-      const gapFromOpen    = openPrice > 0
+      // ── TODAY'S OPEN / HIGH / LOW — safe (set at market open) ────
+      const openPrice       = parseFloat((day.o || curr).toFixed(2));
+      const todayHigh       = parseFloat((day.h || curr).toFixed(2));
+      const todayLow        = parseFloat((day.l || curr).toFixed(2));
+      const gapFromOpen     = openPrice > 0
         ? parseFloat((((curr - openPrice) / openPrice) * 100).toFixed(2)) : 0;
       const fromOpenDollars = parseFloat((curr - openPrice).toFixed(2));
 
-      // ── VWAP — from Polygon snapshot day.vw ─────────────────────
-      const vwap         = day.vw ? parseFloat(day.vw.toFixed(2)) : null;
-      const priceVsVwap  = vwap
-        ? parseFloat((curr - vwap).toFixed(2)) : null;           // negative = below VWAP (oversold)
-      const pctFromVwap  = (vwap && vwap > 0)
-        ? parseFloat((((curr - vwap) / vwap) * 100).toFixed(2)) : null;
-      const belowVwap    = vwap ? curr < vwap : null;            // true = bounce signal for dip
+      // ── 52W HIGH/LOW — NOTE: using today's high/low as proxy ─────
+      // Real 52w needs separate Polygon call — known limitation
+      // These are labeled week52 but are actually today's range
+      const week52High  = parseFloat((day.h || curr * 1.05).toFixed(2));
+      const week52Low   = parseFloat((day.l || curr * 0.95).toFixed(2));
+      const todayRange  = week52High - week52Low;
+      const distFromLow = todayRange > 0
+        ? parseFloat((((curr - week52Low) / todayRange) * 100).toFixed(1)) : 50;
 
-      // ── ATR signals ──────────────────────────────────────────────
-      const atr              = atrMap[ticker] ?? null;           // avg daily $ move (14d)
-      const todayMoveAbs     = parseFloat(Math.abs(curr - openPrice).toFixed(2));
-      const atrPctUsed       = (atr && atr > 0)                 // how much of daily range used up
+      // ── VWAP — mild risk: accumulates from market open ───────────
+      // Safe during market hours. At open or pre-market may be 0.
+      // FIX: null it out if market not yet open (vol=0 but stock exists)
+      const vwap        = (day.vw && vol > 0) ? parseFloat(day.vw.toFixed(2)) : null;
+      const priceVsVwap = vwap ? parseFloat((curr - vwap).toFixed(2)) : null;
+      const pctFromVwap = (vwap && vwap > 0)
+        ? parseFloat((((curr - vwap) / vwap) * 100).toFixed(2)) : null;
+      const belowVwap   = vwap ? curr < vwap : null;
+
+      // ── ATR signals — 14-day historical, safe for sizing ─────────
+      const atr                 = atrMap[ticker] ?? null;
+      const todayMoveAbs        = parseFloat(Math.abs(curr - openPrice).toFixed(2));
+      const atrPctUsed          = (atr && atr > 0)
         ? parseFloat(((todayMoveAbs / atr) * 100).toFixed(1)) : null;
-      const atrRemainingDollars = (atr && atrPctUsed !== null)  // $ left in typical daily range
-        ? parseFloat((atr - todayMoveAbs).toFixed(2)) : null;
-      const dipVsAtr         = (atr && dipDollars > 0)          // dip size vs ATR (>1.5 = over-extended)
+      const atrRemainingDollars = (atr && atrPctUsed !== null)
+        ? parseFloat(Math.max(0, atr - todayMoveAbs).toFixed(2)) : null;
+      const dipVsAtr            = (atr && dipDollars > 0)
         ? parseFloat((dipDollars / atr).toFixed(2)) : null;
 
-      // Format news headlines as a compact string for Claude prompt
+      // ── NEWS ─────────────────────────────────────────────────────
       const newsHeadlines = newsMap[ticker] || [];
       const newsStr = newsHeadlines.length > 0
         ? newsHeadlines.map(n =>
@@ -207,22 +232,20 @@ export default async function handler(req, res) {
 
       return {
         ticker, curr, prev,
+        priceSource, priceSuspect,
         openPrice, todayHigh, todayLow,
         gapFromOpen, fromOpenDollars,
         dipDollars, dipPct,
         rsi:    rsiMap[ticker] ?? null,
-        vol,    avgVol, volRatio,
+        vol, avgVol, volRatio,
+        avgVolSource: avgVolMap[ticker] ? "30day_avg" : "prev_day_proxy",
         week52High, week52Low, distFromLow,
         isMover: movers.includes(ticker),
-        avgVolSource: avgVolMap[ticker] ? "30day_avg" : "prev_day_proxy",
-        // ── VWAP ─────────────────────────────────────────────────
         vwap, priceVsVwap, pctFromVwap, belowVwap,
-        // ── ATR ──────────────────────────────────────────────────
         atr, atrPctUsed, atrRemainingDollars, dipVsAtr,
-        // ── NEWS ─────────────────────────────────────────────────
-        news:        newsHeadlines,
-        newsStr:     newsStr,
-        newsCount:   newsHeadlines.length,
+        news:      newsHeadlines,
+        newsStr,
+        newsCount: newsHeadlines.length,
       };
     });
 
