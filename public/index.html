@@ -847,8 +847,9 @@ async function runScan(){
   const maybeWatch  = movers.filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
   const combined    = [...mustCheck, ...maybeWatch].slice(0, 30);
   const topRows = combined.map(s =>
-    s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x"
-  ).join(", ");
+    s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x" +
+    (s.newsStr && s.newsStr !== "NO_RECENT_NEWS" ? " NEWS=[" + s.newsStr + "]" : " NEWS=[none]")
+  ).join("\n");
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
 
@@ -886,7 +887,15 @@ async function runScan(){
     "WATCHING criteria: dip 0.8-1.5% with RSI 45-55 and falling, OR dip > 1.5% but RSI 45-60 (not yet oversold). Include exact triggerPrice.",
     "Skip everything else.",
     "",
-    "DATA: " + topRows,
+    "NEWS FILTER — each stock includes real headlines from Polygon.io (last 3 days).",
+    "newsFlag rules:",
+    "  SKIP — earnings TODAY or TOMORROW, FDA decision, legal/fraud news, delisting risk → remove from trades",
+    "  CAUTION — earnings next week, analyst downgrade, sector concern, mixed news → lower confidence 10pts",
+    "  SAFE — no news, positive news, old news (>2 days), or news unrelated to stock price → proceed normally",
+    "If NEWS=[none] treat as SAFE.",
+    "",
+    "DATA (one stock per line):",
+    topRows,
     "",
     "Return compact JSON only:",
     "{",
@@ -895,11 +904,13 @@ async function runScan(){
     "  marketMood: one sentence,",
     "  tomorrowWatch: one sentence,",
     "  trades: [",
-    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, riskLevel, triggerPrice}",
+    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, newsSummary, riskLevel, triggerPrice}",
     "  ]",
     "}",
     "",
     "Keep trades array SHORT - max 8 entries. Only include BUY and WATCHING tiers.",
+    "newsFlag must be exactly: SAFE, CAUTION, or SKIP — followed by a dash and brief reason.",
+    "newsSummary: one sentence about what the news means for this trade. If no news write 'No recent news found'.",
     "Raw JSON only. No markdown. No explanation."
   ];
   const prompt = promptParts.join("\n");
@@ -1076,8 +1087,9 @@ async function runGapAnalysis(data) {
   var gapRows = gapCandidates.map(function(s){
     var gap = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
     var openInfo = s.openPrice ? " open=$"+s.openPrice+" high=$"+s.todayHigh+" movedFromOpen="+s.gapFromOpen+"%" : "";
-    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A");
-  }).join(", ");
+    var newsInfo = (s.newsStr && s.newsStr !== "NO_RECENT_NEWS") ? " NEWS=["+s.newsStr+"]" : " NEWS=[none]";
+    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A")+newsInfo;
+  }).join("\n");
 
   // Time-aware criteria
   var maxTarget = minsLeft < 60 ? "$8 minimum (time limited)" : "$15 minimum";
@@ -1098,10 +1110,19 @@ async function runGapAnalysis(data) {
     "5. Clear catalyst or sector momentum supporting the move",
     "6. Confidence 85+ only",
     "",
+    "NEWS FILTER — each stock includes real headlines from Polygon.io (last 3 days).",
+    "  SKIP if: earnings today/tomorrow, FDA decision, fraud/legal news → do NOT include in setups",
+    "  CAUTION if: earnings next week, analyst downgrade, mixed news → lower confidence 10pts",
+    "  SAFE if: no news, positive catalyst news (e.g. contract win, upgrade), or unrelated news",
+    "Gap ups WITH a positive news catalyst (earnings beat, contract, upgrade) are HIGHER confidence.",
+    "Gap ups with NEGATIVE news = likely dead cat bounce — SKIP.",
+    "If NEWS=[none] treat as SAFE.",
+    "",
     "If time is midday, entryPrice = current price right now. Target must be reachable before 3:30pm.",
     "If no stock qualifies return empty setups array.",
     "",
-    "STOCKS: "+gapRows,
+    "STOCKS (one per line):",
+    gapRows,
     "",
     "Return compact JSON only:",
     "{",
@@ -1109,8 +1130,10 @@ async function runGapAnalysis(data) {
     '  "summary": "one sentence",',
     '  "timeMode": "'+timeMode+'",',
     '  "timeWarning": "'+timeWarning+'",',
-    "  setups: [{ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel}]",
+    "  setups: [{ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel, newsFlag, newsSummary}]",
     "}",
+    "newsFlag: SAFE, CAUTION, or SKIP — with brief reason.",
+    "newsSummary: one sentence on what the news means for this trade. If no news: 'No recent news found'.",
     "Raw JSON only. No markdown."
   ];
   var gapPrompt = gapPromptParts.join("\n");
@@ -1198,6 +1221,14 @@ function renderGapResult(gapResult, data, container) {
       html += '</div>';
 
       html += '<div class="catalyst-box">CATALYST: '+(setup.catalyst||"Momentum")+'</div>';
+
+      // News badge — real Polygon.io headlines
+      if(setup.newsFlag){
+        var gnf       = setup.newsFlag||"";
+        var gnewsClass= gnf.startsWith("SAFE")?"news-safe":gnf.startsWith("CAUTION")?"news-warn":"news-skip";
+        html += '<div class="'+gnewsClass+'">📰 NEWS (Polygon.io): '+gnf+' — '+(setup.newsSummary||"No recent news found")+'</div>';
+      }
+
       html += '<div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:10px">'+(setup.reason||"")+'</div>';
 
       html += '<div class="price-grid">';
@@ -1284,7 +1315,7 @@ function renderResult(result,data){
       html += '<span style="font-size:9px;color:#2a3045;margin-left:auto">' + (trade.holdDays||"1-2") + 'd</span>';
       html += '</div>';
       html += '<div class="trade-reason">' + (trade.reason||"") + '</div>';
-      html += '<div class="' + newsClass + '">NEWS: ' + (trade.newsFlag||"") + ' - ' + (trade.newsSummary||"") + '</div>';
+      html += '<div class="' + newsClass + '">📰 NEWS (Polygon.io): ' + (trade.newsFlag||"SAFE") + ' — ' + (trade.newsSummary||"No recent news found") + '</div>';
       html += '<div class="price-grid">';
       html += '<div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$' + (sd.curr||trade.entryPrice||"--") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">' + (sd.dipPct?sd.dipPct+"%":"--") + '</div></div>';
