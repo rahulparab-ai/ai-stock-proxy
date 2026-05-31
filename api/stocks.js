@@ -1,14 +1,15 @@
 // ─────────────────────────────────────────────────────────────────
 // Vercel Serverless Function — Stock Data Proxy (Polygon / Massive)
-// Fixed: avgVol now fetched from ticker details API (real 30-day avg)
+// v2: Real news headlines fetched from Polygon news API per ticker
 // ─────────────────────────────────────────────────────────────────
 
 const POLY_KEY = process.env.POLYGON_API_KEY;
 const BASE     = "https://api.polygon.io";
 
 // Cache for 10 minutes
-let cache = { data: null, ts: 0 };
-const CACHE_MS = 10 * 60 * 1000;
+let cache = { data: null, ts: 0, newsCache: {} };
+const CACHE_MS      = 10 * 60 * 1000;
+const NEWS_CACHE_MS = 15 * 60 * 1000; // news cached 15 mins separately
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -39,18 +40,11 @@ export default async function handler(req, res) {
     const snapMap  = {};
     (snapData.tickers || []).forEach(t => { snapMap[t.ticker] = t; });
 
-    // ── STEP 2: Ticker Details — gets real 30-day avg volume ──────
-    // Polygon v3 /reference/tickers/{ticker} has weighted_shares_outstanding
-    // Better: use /v2/aggs/ticker/{ticker}/prev for yesterday's volume
-    // We fetch prev day agg for all tickers in parallel to get real avgVol
-    // Actually best source: grouped daily endpoint gives volume_weighted data
-    // Use /v2/aggs/ticker/{T}/range/1/day/{from}/{to} last 30 days, take average
+    // ── STEP 2: Identify movers for RSI + avgVol + NEWS ───────────
+    const today = new Date();
+    const from  = new Date(today - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const to    = today.toISOString().split("T")[0];
 
-    const today   = new Date();
-    const from    = new Date(today - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const to      = today.toISOString().split("T")[0];
-
-    // Only fetch avg vol for movers to save API calls
     const movers = tickerList.filter(ticker => {
       const snap = snapMap[ticker];
       if (!snap) return false;
@@ -60,11 +54,13 @@ export default async function handler(req, res) {
       return Math.abs(((curr - prev) / prev) * 100) >= 0.5;
     });
 
-    // ── STEP 3: Fetch RSI + avgVol in parallel for movers ─────────
+    // ── STEP 3: Fetch RSI + avgVol + NEWS in parallel for movers ──
     const rsiMap    = {};
     const avgVolMap = {};
+    const newsMap   = {};
 
     await Promise.all(movers.map(async ticker => {
+
       // RSI
       try {
         const rsiUrl =
@@ -75,7 +71,7 @@ export default async function handler(req, res) {
         rsiMap[ticker] = val ? parseFloat(val.toFixed(1)) : null;
       } catch (_) { rsiMap[ticker] = null; }
 
-      // Real 30-day average volume from daily aggregates
+      // Real 30-day average volume
       try {
         const aggUrl =
           `${BASE}/v2/aggs/ticker/${ticker}/range/1/day/${from}/${to}` +
@@ -87,6 +83,37 @@ export default async function handler(req, res) {
           avgVolMap[ticker] = Math.floor(totalVol / bars.length);
         }
       } catch (_) { avgVolMap[ticker] = null; }
+
+      // ── NEWS: Fetch last 2 headlines from Polygon news API ──────
+      // Uses cache to avoid hammering news API on every scan
+      const newsCacheEntry = cache.newsCache[ticker];
+      if (newsCacheEntry && (now - newsCacheEntry.ts) < NEWS_CACHE_MS) {
+        newsMap[ticker] = newsCacheEntry.headlines;
+      } else {
+        try {
+          // published_utc.gte = today minus 3 days to catch weekend news
+          const threeDaysAgo = new Date(today - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+          const newsUrl =
+            `${BASE}/v2/reference/news` +
+            `?ticker=${ticker}&published_utc.gte=${threeDaysAgo}&order=desc&limit=2&apiKey=${POLY_KEY}`;
+          const newsJson = await (await fetch(newsUrl)).json();
+          const articles = newsJson.results || [];
+
+          // Extract just what Claude needs: title + published date
+          const headlines = articles.map(a => ({
+            title:     a.title || "",
+            published: a.published_utc ? a.published_utc.slice(0, 10) : "",
+            sentiment: a.insights?.find(i => i.ticker === ticker)?.sentiment || "neutral",
+          }));
+
+          newsMap[ticker] = headlines;
+          // Store in news cache
+          cache.newsCache[ticker] = { headlines, ts: now };
+        } catch (_) {
+          newsMap[ticker] = [];
+        }
+      }
+
     }));
 
     // ── STEP 4: Build results ─────────────────────────────────────
@@ -100,7 +127,6 @@ export default async function handler(req, res) {
       const prev    = parseFloat((prevDay.c || 0).toFixed(2));
       const vol     = Math.floor(day.v || 0);
 
-      // Use real 30-day avg if available, otherwise use prev day vol as proxy
       const avgVol  = avgVolMap[ticker]
         || Math.floor(snap.prevDay?.v || vol || 1);
 
@@ -110,8 +136,6 @@ export default async function handler(req, res) {
       const volRatio   = avgVol > 0
         ? parseFloat((vol / avgVol).toFixed(2)) : 1;
 
-      // 52w high/low from snapshot min/max — use prevDay data as proxy
-      // (full 52w needs separate call — keeping it fast)
       const week52High = parseFloat((snap.day?.h || curr * 1.3).toFixed(2));
       const week52Low  = parseFloat((snap.day?.l || curr * 0.7).toFixed(2));
       const todayRange = week52High - week52Low;
@@ -119,12 +143,20 @@ export default async function handler(req, res) {
         ? parseFloat((((curr - week52Low) / todayRange) * 100).toFixed(1))
         : 50;
 
-      const openPrice  = parseFloat((day.o || curr).toFixed(2));
-      const todayHigh  = parseFloat((day.h || curr).toFixed(2));
-      const todayLow   = parseFloat((day.l || curr).toFixed(2));
-      const gapFromOpen = openPrice > 0
+      const openPrice      = parseFloat((day.o || curr).toFixed(2));
+      const todayHigh      = parseFloat((day.h || curr).toFixed(2));
+      const todayLow       = parseFloat((day.l || curr).toFixed(2));
+      const gapFromOpen    = openPrice > 0
         ? parseFloat((((curr - openPrice) / openPrice) * 100).toFixed(2)) : 0;
       const fromOpenDollars = parseFloat((curr - openPrice).toFixed(2));
+
+      // Format news headlines as a compact string for Claude prompt
+      const newsHeadlines = newsMap[ticker] || [];
+      const newsStr = newsHeadlines.length > 0
+        ? newsHeadlines.map(n =>
+            `[${n.published}] ${n.title}${n.sentiment !== "neutral" ? ` (${n.sentiment})` : ""}`
+          ).join(" | ")
+        : "NO_RECENT_NEWS";
 
       return {
         ticker, curr, prev,
@@ -136,10 +168,14 @@ export default async function handler(req, res) {
         week52High, week52Low, distFromLow,
         isMover: movers.includes(ticker),
         avgVolSource: avgVolMap[ticker] ? "30day_avg" : "prev_day_proxy",
+        // ── NEW: real news data ──────────────────────────────────
+        news:        newsHeadlines,     // full array for Setup tab debug
+        newsStr:     newsStr,           // compact string for Claude prompt
+        newsCount:   newsHeadlines.length,
       };
     });
 
-    cache = { data: results, ts: now };
+    cache = { data: results, ts: now, newsCache: cache.newsCache };
 
     return res.status(200).json({
       stocks:      results,
