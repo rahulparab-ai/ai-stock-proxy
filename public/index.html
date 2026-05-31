@@ -1603,22 +1603,30 @@ async function testProxy(){
       html += '<div style="font-weight:800;color:#f0f4ff;margin-bottom:6px">'+s.ticker+'</div>';
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">';
       html += '<div>Price: <span style="color:#dde3ee">$'+s.curr+'</span></div>';
+      html += '<div style="font-size:9px">Source: <span style="color:#a855f7">'+(s.priceSource||"unknown")+'</span></div>';
       html += '<div>Prev Close: <span style="color:#dde3ee">$'+s.prev+'</span></div>';
+      html += '<div>Dip%: <span style="color:#ff6b6b">'+s.dipPct+'%</span></div>';
       html += '<div>Open: <span style="color:#5b8fff">$'+(s.openPrice||"N/A")+'</span></div>';
       html += '<div>Today High: <span style="color:#00e5a0">$'+(s.todayHigh||"N/A")+'</span></div>';
-      html += '<div>Gap from Open: <span style="color:'+(s.gapFromOpen>0?"#00e5a0":"#ff6b6b")+'">'+(s.gapFromOpen||0)+'%</span></div>';
-      html += '<div>Dip from Prev: <span style="color:#ff6b6b">'+s.dipPct+'%</span></div>';
       html += '<div>RSI: <span style="color:#f4c430">'+s.rsi+'</span></div>';
       html += '<div>Vol Ratio: <span style="'+volStatus+'">'+(s.volRatio||"NULL")+'x</span></div>';
-      html += '<div>Volume: <span style="color:#dde3ee">'+(s.vol?s.vol.toLocaleString():"NULL")+'</span></div>';
-      html += '<div>Avg Vol: <span style="color:#dde3ee">'+(s.avgVol?s.avgVol.toLocaleString():"NULL")+'</span></div>';
+      html += '<div>VWAP: <span style="color:#5b8fff">$'+(s.vwap||"N/A")+'</span></div>';
+      html += '<div>ATR: <span style="color:#a855f7">$'+(s.atr||"N/A")+'</span></div>';
       html += '</div>';
-      // Flag the specific issue
-      if(!s.avgVol || s.avgVol === s.vol){
-        html += '<div style="color:#f4c430;margin-top:6px;font-size:9px">WARNING: avgVol = vol (Polygon not returning avg volume field)</div>';
+      // Price suspect warning
+      if(s.priceSuspect){
+        html += '<div style="color:#ff4444;margin-top:6px;font-size:9px;font-weight:800">⚠️ PRICE SUSPECT: $'+s.curr+' vs prev $'+s.prev+' — may be stale</div>';
       }
-      if(s.volRatio === 1 || s.volRatio === 1.0){
-        html += '<div style="color:#ff4444;margin-top:4px;font-size:9px">ISSUE: volRatio = 1x exactly — avgVol field is broken</div>';
+      // Show priceSource warning
+      if(s.priceSource === 'day_close_fallback'){
+        html += '<div style="color:#ff8800;margin-top:4px;font-size:9px">⚠️ USING day.c FALLBACK — lastTrade and min not available. Check Polygon plan.</div>';
+      } else if(s.priceSource === 'todaysChange_calc'){
+        html += '<div style="color:#00e5a0;margin-top:4px;font-size:9px">✓ Price from todaysChange calc (free plan compatible)</div>';
+      } else if(s.priceSource === 'last_trade'){
+        html += '<div style="color:#00e5a0;margin-top:4px;font-size:9px">✓ Price from lastTrade.p (Starter plan live data)</div>';
+      } else if(s.priceSource === 'min_bar'){
+        html += '<div style="color:#00e5a0;margin-top:4px;font-size:9px">✓ Price from min bar (Starter plan live data)</div>';
+      }
       }
       html += '</div>';
     });
