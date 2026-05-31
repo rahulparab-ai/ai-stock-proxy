@@ -1,6 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // Vercel Serverless Function — Stock Data Proxy (Polygon / Massive)
-// v2: Real news headlines fetched from Polygon news API per ticker
+// v3: VWAP (from snapshot), ATR (14d), real news headlines added
+//     VWAP = intraday price target for bounces
+//     ATR  = avg daily $ range, used for position sizing + room-to-run
 // ─────────────────────────────────────────────────────────────────
 
 const POLY_KEY = process.env.POLYGON_API_KEY;
@@ -54,8 +56,9 @@ export default async function handler(req, res) {
       return Math.abs(((curr - prev) / prev) * 100) >= 0.5;
     });
 
-    // ── STEP 3: Fetch RSI + avgVol + NEWS in parallel for movers ──
+    // ── STEP 3: Fetch RSI + ATR + avgVol + NEWS in parallel ──────
     const rsiMap    = {};
+    const atrMap    = {};
     const avgVolMap = {};
     const newsMap   = {};
 
@@ -70,6 +73,19 @@ export default async function handler(req, res) {
         const val = rsiJson?.results?.values?.[0]?.value;
         rsiMap[ticker] = val ? parseFloat(val.toFixed(1)) : null;
       } catch (_) { rsiMap[ticker] = null; }
+
+      // ATR (14-day Average True Range) — real average daily dollar move
+      try {
+        const atrUrl =
+          `${BASE}/v1/indicators/atr/${ticker}` +
+          `?timespan=day&adjusted=true&window=14&series_type=close&limit=1&apiKey=${POLY_KEY}`;
+        const atrJson = await (await fetch(atrUrl)).json();
+        const atrVal  = atrJson?.results?.values?.[0]?.value;
+        atrMap[ticker] = atrVal ? parseFloat(atrVal.toFixed(2)) : null;
+      } catch (_) { atrMap[ticker] = null; }
+
+      // VWAP — already in Polygon snapshot day.vw, extracted below in results
+      // (no extra API call needed)
 
       // Real 30-day average volume
       try {
@@ -150,6 +166,24 @@ export default async function handler(req, res) {
         ? parseFloat((((curr - openPrice) / openPrice) * 100).toFixed(2)) : 0;
       const fromOpenDollars = parseFloat((curr - openPrice).toFixed(2));
 
+      // ── VWAP — from Polygon snapshot day.vw ─────────────────────
+      const vwap         = day.vw ? parseFloat(day.vw.toFixed(2)) : null;
+      const priceVsVwap  = vwap
+        ? parseFloat((curr - vwap).toFixed(2)) : null;           // negative = below VWAP (oversold)
+      const pctFromVwap  = (vwap && vwap > 0)
+        ? parseFloat((((curr - vwap) / vwap) * 100).toFixed(2)) : null;
+      const belowVwap    = vwap ? curr < vwap : null;            // true = bounce signal for dip
+
+      // ── ATR signals ──────────────────────────────────────────────
+      const atr              = atrMap[ticker] ?? null;           // avg daily $ move (14d)
+      const todayMoveAbs     = parseFloat(Math.abs(curr - openPrice).toFixed(2));
+      const atrPctUsed       = (atr && atr > 0)                 // how much of daily range used up
+        ? parseFloat(((todayMoveAbs / atr) * 100).toFixed(1)) : null;
+      const atrRemainingDollars = (atr && atrPctUsed !== null)  // $ left in typical daily range
+        ? parseFloat((atr - todayMoveAbs).toFixed(2)) : null;
+      const dipVsAtr         = (atr && dipDollars > 0)          // dip size vs ATR (>1.5 = over-extended)
+        ? parseFloat((dipDollars / atr).toFixed(2)) : null;
+
       // Format news headlines as a compact string for Claude prompt
       const newsHeadlines = newsMap[ticker] || [];
       const newsStr = newsHeadlines.length > 0
@@ -168,9 +202,13 @@ export default async function handler(req, res) {
         week52High, week52Low, distFromLow,
         isMover: movers.includes(ticker),
         avgVolSource: avgVolMap[ticker] ? "30day_avg" : "prev_day_proxy",
-        // ── NEW: real news data ──────────────────────────────────
-        news:        newsHeadlines,     // full array for Setup tab debug
-        newsStr:     newsStr,           // compact string for Claude prompt
+        // ── VWAP ─────────────────────────────────────────────────
+        vwap, priceVsVwap, pctFromVwap, belowVwap,
+        // ── ATR ──────────────────────────────────────────────────
+        atr, atrPctUsed, atrRemainingDollars, dipVsAtr,
+        // ── NEWS ─────────────────────────────────────────────────
+        news:        newsHeadlines,
+        newsStr:     newsStr,
         newsCount:   newsHeadlines.length,
       };
     });
