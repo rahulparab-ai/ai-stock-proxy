@@ -452,14 +452,14 @@ const DEFAULT_WATCHLIST = [
   // AI GPUs & Fabless Leaders
   "NVDA","AMD","MRVL","QCOM","ARM","CBRS",
   // Semiconductor Equipment
-  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","ASMI","AZTA","VECO","UCTT","ICHR","CCMP","COHU","PLAB",
+  "AMAT","LRCX","KLAC","TER","ONTO","ACLS","ASML","AZTA","VECO","UCTT","ICHR","COHU","PLAB",
   // EDA & IP
-  "SNPS","CDNS","ANSS","RMBS","CEVA","IDCC",
+  "SNPS","CDNS","RMBS","CEVA","IDCC",
   // Memory & Storage
   "MU","WDC","SNDK","STX",
   // IDMs & Foundries
   "INTC","AVGO","TSM","GFS","UMC","TSEM",
-  "TXN","ADI","ON","MCHP","NXPI","STM","MPWR","SWKS","QRVO","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
+  "TXN","ADI","ON","MCHP","NXPI","STM","MPWR","SWKS","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
   // Raw Materials & Chemicals
   "ENTG","WOLF","COHR","AXTI","LIN","APD","DD","MTRN",
   // Packaging & Test
@@ -467,34 +467,34 @@ const DEFAULT_WATCHLIST = [
   // Storage & Infrastructure Hardware
   "SMCI","DELL","HPE",
   // Cloud & Infrastructure
-  "MSFT","AMZN","GOOGL","ORCL","ANET","CSCO","VRT","JNPR","DOCN","NET",
+  "MSFT","AAPL","AMZN","GOOGL","ORCL","IBM","ANET","CSCO","VRT","DOCN","NET",
   // AI Software & Data
-  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","CFLT","HUBS","GTLB",
+  "PLTR","AI","CRM","ADBE","NOW","SNOW","DDOG","MDB","ESTC","HUBS","GTLB","RDDT",
   // Cybersecurity
   "CRWD","PANW","ZS","S",
   // Robotics & Automation
-  "TSLA","PATH","ROK","SYM","ARKQ","ISRG",
+  "TSLA","PATH","ROK","SYM","ISRG",
   // Quantum Computing
   "IONQ","RGTI","QUBT",
   // AI Power & Data Centers
   "APLD","CORZ","IREN","WULF","ETN","GEV","CEG","VST",
-  // AI Applications
-  "SOUN","BBAI",
+  // Crypto & Fintech
+  "COIN",
   // Distribution
   "ARW","AVT","SNX",
   // ETFs
-  "SMH","SOXX","BOTZ","CHAT","BILL"
+  "SMH","SOXX","BOTZ","BILL"
 ];
 
 let scanMode      = localStorage.getItem("scanMode") || "dip";
 let openPositions = JSON.parse(localStorage.getItem("openPositions")||"[]"); // dip | gap | both
 
-// Version check — if saved watchlist is smaller than default, reset to new default
-var WATCHLIST_VERSION = "v3"; // bump this any time DEFAULT_WATCHLIST grows
+// Version v8 — removed ANSS,JNPR,QRVO,ASMI,CFLT,CCMP,ARKQ,SOUN,BBAI,CHAT — added IBM,AAPL,RDDT,COIN
+var WATCHLIST_VERSION = "v8";
 var savedVersion  = localStorage.getItem("watchlistVersion");
 var savedWatchlist= JSON.parse(localStorage.getItem("watchlist")||"null");
 var watchlist;
-if(!savedWatchlist || savedVersion !== WATCHLIST_VERSION || savedWatchlist.length < DEFAULT_WATCHLIST.length){
+if(!savedWatchlist || savedVersion !== WATCHLIST_VERSION){
   watchlist = DEFAULT_WATCHLIST.slice();
   localStorage.setItem("watchlist", JSON.stringify(watchlist));
   localStorage.setItem("watchlistVersion", WATCHLIST_VERSION);
@@ -863,26 +863,33 @@ async function runScan(){
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
 
-  // Build exclusion report - why each dipping stock was or wasn't sent to Claude
-  const exclusionReport = movers
-    .filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 1.0)
+  // Build exclusion report — show ALL stocks so user can see every price + status
+  // Sorted: biggest dippers first, then flat, then gainers
+  const exclusionReport = allStocks
     .map(s => {
       const inCombined = combined.find(c => c.ticker === s.ticker);
+      const rawDip = s.dipPct || 0;
+      const dip    = Math.abs(rawDip);
       const reasons = [];
-      if (Math.abs(s.dipPct||0) < 1.0) reasons.push("dip only " + s.dipPct + "% (need 1.0%)");
-      if (s.rsi && s.rsi > 45  && Math.abs(s.dipPct||0) < 3) reasons.push("RSI " + s.rsi + " (need <=45, or dip 3%+ to bypass)");
-      if ((s.volRatio||0) < 0.8) reasons.push("vol " + s.volRatio + "x (need 0.8x min - stock too quiet)");
+      if (rawDip >= 0 && dip > 0.3)  reasons.push("UP +" + s.dipPct + "% — gap up territory");
+      if (rawDip >= 0 && dip <= 0.3) reasons.push("flat — no signal today");
+      if (rawDip < 0 && dip < 1.0)   reasons.push("dip only " + s.dipPct + "% (need 1.0%+)");
+      if (rawDip < 0 && dip >= 1.0 && s.rsi && s.rsi > 45 && dip < 3) reasons.push("RSI " + s.rsi + " need ≤45 (or 3%+ dip to bypass)");
+      if (rawDip < 0 && (s.volRatio||0) < 0.8) reasons.push("vol " + s.volRatio + "x need 0.8x min");
       return {
-        ticker:     s.ticker,
-        dipPct:     s.dipPct,
-        rsi:        s.rsi,
-        volRatio:   s.volRatio,
-        curr:       s.curr,
+        ticker:       s.ticker,
+        dipPct:       s.dipPct,
+        rsi:          s.rsi,
+        volRatio:     s.volRatio,
+        curr:         s.curr,
+        priceSource:  s.priceSource,
+        vwap:         s.vwap,
+        atr:          s.atr,
         sentToClaude: !!inCombined,
-        buyReasons: reasons
+        buyReasons:   inCombined ? [] : reasons,
       };
     })
-    .sort((a,b) => Math.abs(b.dipPct) - Math.abs(a.dipPct));
+    .sort((a,b) => (a.dipPct||0) - (b.dipPct||0)); // most negative dip first
   
   console.log("[Scanner] Exclusion report:", JSON.stringify(exclusionReport));
   window._lastExclusionReport = exclusionReport;
@@ -1373,27 +1380,29 @@ function renderResult(result,data){
   var report = window._lastExclusionReport||[];
   if(report.length>0){
     html += '<div style="background:#080a12;border:1px solid #1a1f2e;border-radius:8px;padding:14px;margin-bottom:12px;">';
-    html += '<div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:10px">SCAN TRANSPARENCY</div>';
+    html += '<div style="font-size:9px;color:#2a3045;letter-spacing:2px;margin-bottom:10px">SCAN TRANSPARENCY — ' + report.length + ' STOCKS</div>';
     report.forEach(function(s){
-      var sentColor = s.sentToClaude?"#00e5a0":"#ff4444";
-      html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #0d1020;">';
-      html += '<span style="font-size:12px;font-weight:800;color:#c8d0e8;width:50px;flex-shrink:0">' + s.ticker + '</span>';
+      var sentColor = s.sentToClaude ? "#00e5a0" : "#ff4444";
+      var dipColor  = (s.dipPct||0) < -1.5 ? "#00e5a0" : (s.dipPct||0) < 0 ? "#ff8800" : "#3a4255";
+      var srcColor  = (s.priceSource==="last_trade"||s.priceSource==="min_bar") ? "#00e5a066"
+                    : s.priceSource==="prev_close_weekend" ? "#5b8fff66" : "#f4c43066";
+      html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #0d1020;">';
+      html += '<span style="font-size:11px;font-weight:800;color:#c8d0e8;width:52px;flex-shrink:0">' + s.ticker + '</span>';
       html += '<div style="flex:1;">';
-      html += '<span style="font-size:9px;color:' + sentColor + '">' + (s.sentToClaude?"SENT":"FILTERED") + '</span>';
-      // Current price + price source
-      if(s.curr){
-        var srcColor = (s.priceSource==="last_trade"||s.priceSource==="min_bar") ? "#00e5a0" : (s.priceSource==="prev_close_weekend"?"#5b8fff":"#f4c430");
-        html += ' <span style="font-size:10px;font-weight:800;color:#dde3ee">$' + s.curr + '</span>';
-        html += ' <span style="font-size:8px;color:' + srcColor + '">(' + (s.priceSource||"?") + ')</span>';
-      }
-      html += '<div style="font-size:10px;color:#3a4255;margin-top:3px">';
-      html += 'Dip: <span style="color:' + (Math.abs(s.dipPct||0)>=1.5?"#00e5a0":"#ff4444") + '">' + (s.dipPct||0) + '%</span>';
-      html += ' RSI: <span style="color:' + ((s.rsi||99)<40?"#00e5a0":"#ff4444") + '">' + (s.rsi||"N/A") + '</span>';
-      html += ' Vol: <span style="color:' + ((s.volRatio||0)>=1.2?"#00e5a0":"#ff4444") + '">' + (s.volRatio||"N/A") + 'x</span>';
-      if(s.vwap) html += ' VWAP: <span style="color:#5b8fff">$' + s.vwap + '</span>';
-      if(s.atr)  html += ' ATR: <span style="color:#a855f7">$' + s.atr + '</span>';
+      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">';
+      html += '<span style="font-size:11px;font-weight:800;color:#dde3ee">$' + (s.curr||"--") + '</span>';
+      html += '<span style="font-size:8px;color:' + sentColor + ';letter-spacing:1px">' + (s.sentToClaude?"SENT":"SKIP") + '</span>';
+      if(s.priceSource) html += '<span style="font-size:7px;background:' + srcColor + ';color:#dde3ee88;padding:1px 4px;border-radius:3px">' + s.priceSource + '</span>';
       html += '</div>';
-      if(!s.sentToClaude && s.buyReasons && s.buyReasons.length>0) html += '<div style="font-size:9px;color:#ff444488;margin-top:2px">Blocked: ' + s.buyReasons.join(" - ") + '</div>';
+      html += '<div style="font-size:10px;color:#3a4255;">';
+      html += 'Dip:<span style="color:' + dipColor + '">' + (s.dipPct||0) + '%</span>';
+      html += ' RSI:<span style="color:' + ((s.rsi||99)<=45?"#00e5a0":(s.rsi||99)<=60?"#f4c430":"#ff4444") + '">' + (s.rsi||"--") + '</span>';
+      html += ' Vol:<span style="color:' + ((s.volRatio||0)>=0.8?"#00e5a0":"#ff4444") + '">' + (s.volRatio||"--") + 'x</span>';
+      if(s.atr) html += ' ATR:<span style="color:#a855f7">$' + s.atr + '</span>';
+      html += '</div>';
+      if(!s.sentToClaude && s.buyReasons && s.buyReasons.length>0){
+        html += '<div style="font-size:9px;color:#ff444488;margin-top:1px">↳ ' + s.buyReasons[0] + '</div>';
+      }
       html += '</div></div>';
     });
     html += '</div>';
