@@ -839,17 +839,23 @@ async function runScan(){
     var vol    = s.volRatio||0;
     var volMin = 0.8;
     if(!vol || vol < volMin) return false;  // skip illiquid stocks
-    if(rawDip >= 0) return false;           // ONLY stocks going DOWN — positive = Gap Up territory
+    if(rawDip >= 0) return false;           // ONLY stocks going DOWN
     if(dip >= 3.0) return true;             // strong dip bypasses RSI check
     if(dip >= 1.5 && (!s.rsi || s.rsi <= 45)) return true; // normal dip needs RSI <= 45
     return false;
   });
   const maybeWatch  = movers.filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
   const combined    = [...mustCheck, ...maybeWatch].slice(0, 30);
-  const topRows = combined.map(s =>
-    s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " vol=" + s.volRatio + "x" +
-    (s.newsStr && s.newsStr !== "NO_RECENT_NEWS" ? " NEWS=[" + s.newsStr + "]" : " NEWS=[none]")
-  ).join("\n");
+  const topRows = combined.map(s => {
+    var vwapInfo = s.vwap
+      ? " VWAP=$"+s.vwap+(s.belowVwap?" (price BELOW-VWAP=bounce zone)":" (price ABOVE-VWAP=caution)")
+      : "";
+    var atrInfo = s.atr
+      ? " ATR=$"+s.atr+(s.atrRemainingDollars!==null?" remaining=$"+s.atrRemainingDollars:"")+(s.dipVsAtr!==null?" dipVsATR="+s.dipVsAtr+"x":"")
+      : "";
+    var newsInfo = (s.newsStr && s.newsStr !== "NO_RECENT_NEWS") ? " NEWS=["+s.newsStr+"]" : " NEWS=[none]";
+    return s.ticker+": $"+s.curr+" dip="+s.dipPct+"% RSI="+(s.rsi||"N/A")+" vol="+s.volRatio+"x"+vwapInfo+atrInfo+newsInfo;
+  }).join("\n");
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
 
@@ -883,15 +889,29 @@ async function runScan(){
     "",
     "Analyze these stocks and return ONLY the ones worth acting on today.",
     "Use the sector health above to calibrate confidence — if sector is OVERBOUGHT, only flag highest conviction dips.",
-    "DIP SCANNER: ONLY flag stocks trading BELOW yesterday close. PATH A: down >= 3% AND vol >= 0.8x. PATH B: down >= 1.5% AND RSI <= 45 AND vol >= 0.8x. Stocks UP today belong in Gap Up scanner. High volume on a DOWN move = bounce signal.",
-    "WATCHING criteria: dip 0.8-1.5% with RSI 45-55 and falling, OR dip > 1.5% but RSI 45-60 (not yet oversold). Include exact triggerPrice.",
-    "Skip everything else.",
     "",
-    "NEWS FILTER — each stock includes real headlines from Polygon.io (last 3 days).",
-    "newsFlag rules:",
-    "  SKIP — earnings TODAY or TOMORROW, FDA decision, legal/fraud news, delisting risk → remove from trades",
-    "  CAUTION — earnings next week, analyst downgrade, sector concern, mixed news → lower confidence 10pts",
-    "  SAFE — no news, positive news, old news (>2 days), or news unrelated to stock price → proceed normally",
+    "DIP BOUNCE RULES — ALL must pass:",
+    "  PATH A (Strong): dip >= 3% AND vol >= 0.8x (bypasses RSI)",
+    "  PATH B (Normal): dip >= 1.5% AND RSI <= 45 AND vol >= 0.8x",
+    "  WATCHING: dip 0.8-1.5% with RSI 45-55 falling, include triggerPrice",
+    "",
+    "VWAP RULES (use to set targetPrice and confirm entry):",
+    "  price BELOW VWAP = oversold vs today's average = stronger bounce signal, use VWAP as target",
+    "  price ABOVE VWAP = already recovered, weaker setup, only flag if dip >= 3% and RSI very low",
+    "  If no VWAP data, estimate target as entry + (dip dollars * 0.6)",
+    "",
+    "ATR RULES (use for target realism and position sizing):",
+    "  ATR = average daily dollar move over 14 days",
+    "  atrRemainingDollars = how much typical daily range is LEFT — this is your realistic max target",
+    "  dipVsATR > 1.5 = stock over-extended, higher bounce probability but also higher risk",
+    "  dipVsATR < 0.5 = small dip relative to ATR, less compelling — needs strong RSI + VWAP signal",
+    "  targetPrice should NEVER exceed entry + atrRemainingDollars (unrealistic)",
+    "  stopLoss = entry - (ATR * 0.3) if ATR available",
+    "",
+    "NEWS FILTER:",
+    "  SKIP — earnings TODAY or TOMORROW, FDA decision, legal/fraud news → remove from trades",
+    "  CAUTION — earnings next week, analyst downgrade → lower confidence 10pts",
+    "  SAFE — no news, positive news, or unrelated news → proceed normally",
     "If NEWS=[none] treat as SAFE.",
     "",
     "DATA (one stock per line):",
@@ -904,13 +924,15 @@ async function runScan(){
     "  marketMood: one sentence,",
     "  tomorrowWatch: one sentence,",
     "  trades: [",
-    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, newsSummary, riskLevel, triggerPrice}",
+    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, newsSummary, riskLevel, triggerPrice, vwapTarget, atrNote}",
     "  ]",
     "}",
     "",
-    "Keep trades array SHORT - max 8 entries. Only include BUY and WATCHING tiers.",
-    "newsFlag must be exactly: SAFE, CAUTION, or SKIP — followed by a dash and brief reason.",
-    "newsSummary: one sentence about what the news means for this trade. If no news write 'No recent news found'.",
+    "Keep trades array SHORT - max 8 entries. Only BUY and WATCHING tiers.",
+    "vwapTarget: the VWAP value used as target (or null).",
+    "atrNote: one phrase like 'ATR $12, $8 range remaining' or null.",
+    "newsFlag: SAFE, CAUTION, or SKIP — with brief reason.",
+    "newsSummary: one sentence. If no news: 'No recent news found'.",
     "Raw JSON only. No markdown. No explanation."
   ];
   const prompt = promptParts.join("\n");
@@ -1085,10 +1107,16 @@ async function runGapAnalysis(data) {
 
   // Build prompt with time-aware rules
   var gapRows = gapCandidates.map(function(s){
-    var gap = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
+    var gap      = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
     var openInfo = s.openPrice ? " open=$"+s.openPrice+" high=$"+s.todayHigh+" movedFromOpen="+s.gapFromOpen+"%" : "";
+    var vwapInfo = s.vwap
+      ? " VWAP=$"+s.vwap+(s.belowVwap?" (below-VWAP)":" (above-VWAP=momentum confirmed)")
+      : "";
+    var atrInfo  = s.atr
+      ? " ATR=$"+s.atr+(s.atrRemainingDollars!==null?" remaining=$"+s.atrRemainingDollars:"")
+      : "";
     var newsInfo = (s.newsStr && s.newsStr !== "NO_RECENT_NEWS") ? " NEWS=["+s.newsStr+"]" : " NEWS=[none]";
-    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A")+newsInfo;
+    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A")+vwapInfo+atrInfo+newsInfo;
   }).join("\n");
 
   // Time-aware criteria
@@ -1101,24 +1129,32 @@ async function runGapAnalysis(data) {
     "You are a momentum trader. "+timeContext,
     "Account: $"+capital+". Goal: $"+dailyGoal+"/day.",
     "",
-    "STRICT RULES - ALL must be true to flag:",
-    "1. RSI between 50-78 — momentum zone, not overbought. RSI above 78 = skip.",
-    "2. Volume at least 1.2x average — confirms institutional buying behind the gap.",
-    "2. RSI between 50-70 - has momentum but not overbought",
-    "3. "+maxTarget+" MORE upside from CURRENT price before market close",
-    "4. Stock has NOT already run more than 12% from its open today (high-momentum AI stocks like PLTR NVDA can run 8-10% and keep going)",
-    "5. Clear catalyst or sector momentum supporting the move",
-    "6. Confidence 85+ only",
+    "STRICT RULES — ALL must be true to flag:",
+    "1. RSI between 50-78 — momentum zone. RSI above 78 = skip (overbought).",
+    "2. Volume at least 1.2x average — confirms institutional buying.",
+    "3. "+maxTarget+" MORE upside from CURRENT price before market close.",
+    "4. Stock has NOT already run more than 12% from open today.",
+    "5. Confidence 85+ only.",
     "",
-    "NEWS FILTER — each stock includes real headlines from Polygon.io (last 3 days).",
-    "  SKIP if: earnings today/tomorrow, FDA decision, fraud/legal news → do NOT include in setups",
-    "  CAUTION if: earnings next week, analyst downgrade, mixed news → lower confidence 10pts",
-    "  SAFE if: no news, positive catalyst news (e.g. contract win, upgrade), or unrelated news",
-    "Gap ups WITH a positive news catalyst (earnings beat, contract, upgrade) are HIGHER confidence.",
-    "Gap ups with NEGATIVE news = likely dead cat bounce — SKIP.",
+    "VWAP RULES:",
+    "  price ABOVE VWAP = momentum confirmed, institutions net buying — stronger gap signal",
+    "  price BELOW VWAP despite gapping = weak gap, fading fast — lower confidence or skip",
+    "  Use VWAP as first target if above VWAP, second target for extended plays",
+    "",
+    "ATR RULES:",
+    "  ATR = average daily dollar move over 14 days",
+    "  atrRemainingDollars = realistic max upside left today",
+    "  targetPrice must NOT exceed entry + atrRemainingDollars",
+    "  If already moved > 80% of ATR from open → skip, no room left",
+    "",
+    "NEWS FILTER:",
+    "  SKIP if: earnings today/tomorrow, fraud/legal news — do NOT include in setups",
+    "  CAUTION if: earnings next week, analyst downgrade — lower confidence 10pts",
+    "  SAFE if: no news, positive catalyst (earnings beat, contract, upgrade) — HIGHER confidence",
+    "  Gap up WITH positive news catalyst = best possible setup.",
+    "  Gap up WITH negative news = dead cat bounce — SKIP.",
     "If NEWS=[none] treat as SAFE.",
     "",
-    "If time is midday, entryPrice = current price right now. Target must be reachable before 3:30pm.",
     "If no stock qualifies return empty setups array.",
     "",
     "STOCKS (one per line):",
@@ -1130,10 +1166,12 @@ async function runGapAnalysis(data) {
     '  "summary": "one sentence",',
     '  "timeMode": "'+timeMode+'",',
     '  "timeWarning": "'+timeWarning+'",',
-    "  setups: [{ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel, newsFlag, newsSummary}]",
+    '  setups: [{ticker, confidence, gapPct, entryPrice, targetPrice, stopLoss, expectedGain, catalyst, reason, riskLevel, newsFlag, newsSummary, vwapTarget, atrNote}]',
     "}",
+    "vwapTarget: the VWAP value if used as target, else null.",
+    "atrNote: one phrase like 'ATR $18, $11 remaining' or null.",
     "newsFlag: SAFE, CAUTION, or SKIP — with brief reason.",
-    "newsSummary: one sentence on what the news means for this trade. If no news: 'No recent news found'.",
+    "newsSummary: one sentence. If no news: 'No recent news found'.",
     "Raw JSON only. No markdown."
   ];
   var gapPrompt = gapPromptParts.join("\n");
@@ -1229,6 +1267,10 @@ function renderGapResult(gapResult, data, container) {
         html += '<div class="'+gnewsClass+'">📰 NEWS (Polygon.io): '+gnf+' — '+(setup.newsSummary||"No recent news found")+'</div>';
       }
 
+      // ATR + VWAP badges
+      if(setup.atrNote) html += '<div style="font-size:10px;color:#a855f7;background:#1a0a20;border:1px solid #a855f733;border-radius:6px;padding:6px 10px;margin-bottom:8px">📊 ATR: '+setup.atrNote+'</div>';
+      if(setup.vwapTarget) html += '<div style="font-size:10px;color:#5b8fff;background:#080e20;border:1px solid #5b8fff33;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚡ VWAP: $'+setup.vwapTarget+' — momentum confirmed above VWAP</div>';
+
       html += '<div style="font-size:11px;color:#5a6580;line-height:1.7;margin-bottom:10px">'+(setup.reason||"")+'</div>';
 
       html += '<div class="price-grid">';
@@ -1315,6 +1357,8 @@ function renderResult(result,data){
       html += '<span style="font-size:9px;color:#2a3045;margin-left:auto">' + (trade.holdDays||"1-2") + 'd</span>';
       html += '</div>';
       html += '<div class="trade-reason">' + (trade.reason||"") + '</div>';
+      if(trade.atrNote) html += '<div style="font-size:10px;color:#a855f7;background:#1a0a20;border:1px solid #a855f733;border-radius:6px;padding:6px 10px;margin-bottom:8px">📊 ATR: ' + trade.atrNote + '</div>';
+      if(trade.vwapTarget) html += '<div style="font-size:10px;color:#5b8fff;background:#080e20;border:1px solid #5b8fff33;border-radius:6px;padding:6px 10px;margin-bottom:8px">⚡ VWAP TARGET: $' + trade.vwapTarget + ' — bounce target based on today\'s volume-weighted avg price</div>';
       html += '<div class="' + newsClass + '">📰 NEWS (Polygon.io): ' + (trade.newsFlag||"SAFE") + ' — ' + (trade.newsSummary||"No recent news found") + '</div>';
       html += '<div class="price-grid">';
       html += '<div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:#dde3ee">$' + (sd.curr||trade.entryPrice||"--") + '</div></div>';
