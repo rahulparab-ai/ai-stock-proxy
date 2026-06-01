@@ -773,7 +773,8 @@ async function runScan(){
       );
       watchlist.forEach(t=>{if(!data[t])data[t]=simulateStock(t);});
     }catch(e){
-      showStatus("Proxy unreachable - using demo data","warn");
+      console.error("[Scan] Proxy fetch failed:", e.message, e);
+      showStatus("⚠️ Proxy error: " + e.message + " — check console","warn");
       watchlist.forEach(t=>{data[t]=simulateStock(t);});
     }
   }else{
@@ -944,7 +945,7 @@ async function runScan(){
         ? { "Content-Type": "application/json" }
         : { "Content-Type": "application/json", ...(apiKey?{"x-api-key":apiKey,"anthropic-version":"2023-06-01"}:{}) },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-5",
         max_tokens: 2000,
         system: "You are a strict swing trading analyst. IMPORTANT: Your entire response must be valid JSON only. Start your response with { and end with }. No words, no explanation, no markdown before or after the JSON. Never force trades. Apply news filter rigorously.",
         messages: [{role:"user", content:prompt}]
@@ -1141,7 +1142,7 @@ async function runGapAnalysis(data) {
       method:"POST",
       headers: proxyUrl ? {"Content-Type":"application/json"} : {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
       body: JSON.stringify({
-        model:"claude-sonnet-4-6",
+        model:"claude-sonnet-4-5",
         max_tokens:1500,
         system:"You are a strict momentum trading analyst. Return raw JSON only. Never force picks. Flag only 85%+ confidence with realistic time-aware targets.",
         messages:[{role:"user",content:gapPrompt}]
@@ -1565,7 +1566,7 @@ async function testClaude(){
     var resp = await fetch(url+"/api/claude",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:20,messages:[{role:"user",content:"Say CONNECTED"}]})
+      body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:20,messages:[{role:"user",content:"Say CONNECTED"}]})
     });
     var rawText = await resp.text();
     var json;
@@ -1702,7 +1703,7 @@ async function runHoldSellCheck(){
   var result;
   try{
     var claudeUrl=proxyUrl?proxyUrl+"/api/claude":"https://api.anthropic.com/v1/messages";
-    var res=await fetch(claudeUrl,{method:"POST",headers:proxyUrl?{"Content-Type":"application/json"}:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:800,system:"Swing trading exit analyst. Raw JSON only.",messages:[{role:"user",content:promptParts.join("\n")}]})});
+    var res=await fetch(claudeUrl,{method:"POST",headers:proxyUrl?{"Content-Type":"application/json"}:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:800,system:"Swing trading exit analyst. Raw JSON only.",messages:[{role:"user",content:promptParts.join("\n")}]})});
     var raw=await res.json();
     var text=(raw.content||[]).map(function(c){ return c.text||""; }).join("");
     var clean=text.replace(/```json|```/g,"").trim();
