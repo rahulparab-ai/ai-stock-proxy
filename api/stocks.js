@@ -180,9 +180,15 @@ export default async function handler(req, res) {
       const prev = parseFloat((prevC || 0).toFixed(2));
 
       // ── VOLUME ───────────────────────────────────────────────────
-      const vol    = Math.floor(day.v || 0);
-      const avgVol = avgVolMap[ticker] || Math.floor(prevDay.v || vol || 1);
-
+      // At 9:30-9:35am Polygon day.v can be null — market just opened
+      // volNull = true means volume not yet available, NOT that stock is illiquid
+      // In this case we pass volRatio as null so Claude knows to not penalize
+      const volRaw   = day.v;
+      const volNull  = (volRaw === null || volRaw === undefined);
+      const vol      = volNull ? 0 : Math.floor(volRaw);
+      const avgVol   = avgVolMap[ticker] || Math.floor(prevDay.v || 1);
+      // volRatio: null = not yet available (first few mins), number = real ratio
+      const volRatio = volNull ? null : (avgVol > 0 ? parseFloat((vol / avgVol).toFixed(2)) : null);
       // ── PRICE SANITY ─────────────────────────────────────────────
       const priceSuspect = prev > 0 && curr > 0 && curr < (prev * 0.30);
 
@@ -199,7 +205,7 @@ export default async function handler(req, res) {
           : (prev > 0 ? parseFloat((((curr - prev) / prev) * 100).toFixed(2)) : 0);
       }
 
-      const volRatio = avgVol > 0 ? parseFloat((vol / avgVol).toFixed(2)) : 1;
+      const volRatioFinal = volRatio; // already calculated above
 
       // ── OPEN / HIGH / LOW ────────────────────────────────────────
       // Weekend: day.o will be 0 (market hasn't opened)
@@ -253,7 +259,7 @@ export default async function handler(req, res) {
         gapFromOpen, fromOpenDollars,
         dipDollars, dipPct,
         rsi:    rsiMap[ticker] ?? null,
-        vol, avgVol, volRatio,
+        vol, avgVol, volRatio, volNull,
         avgVolSource: avgVolMap[ticker] ? "30day_avg" : "prev_day_proxy",
         vwap, priceVsVwap, pctFromVwap, belowVwap,
         atr, atrPctUsed, atrRemainingDollars, dipVsAtr,
