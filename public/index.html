@@ -1063,23 +1063,22 @@ async function runGapAnalysis(data) {
   var broadRallyDay   = window._broadRallyDay   || false;
   var broadSelloffDay = window._broadSelloffDay  || false;
 
-  // RULE 1: Must be gapping up from yesterday
-  // RULE 2: Must not have already moved too far from open (already extended)
-  // RULE 3: Volume — on broad rally days volume is naturally lower, relax to 0.5x
-  var volMinGap = broadRallyDay ? 0.5 : 0.9; // relax on rally days
-  var gapMinPct = broadRallyDay ? 2.0 : 1.5;  // raise bar on rally days (everyone is up, need bigger move)
+  // GAP UP PRE-FILTER — Stage 1
+  // Volume intentionally NOT filtered here — gap itself is the signal
+  // Volume builds through the day — Claude evaluates it in Stage 2
+  // We filter only: direction (must be up), RSI (not overbought), extension (not already run too far)
+  var gapMinPct = broadRallyDay ? 2.0 : 1.5; // higher bar on rally days — everyone is up
 
   var gapCandidates = Object.values(data).filter(function(s){
     if(!s.curr || !s.prev) return false;
     var gapFromYesterday = ((s.curr - s.prev) / s.prev) * 100;
-    var rsiOk = !s.rsi || (s.rsi >= 50 && s.rsi <= 82); // slightly wider on rally days
-    var volOk = s.volNull || !s.volRatio || s.volRatio >= volMinGap;
+    var rsiOk = !s.rsi || (s.rsi >= 50 && s.rsi <= 82);
 
     if(isEarly){
-      return gapFromYesterday >= gapMinPct && s.curr > s.prev && rsiOk && volOk;
+      return gapFromYesterday >= gapMinPct && s.curr > s.prev && rsiOk;
     } else {
-      var notExtended = !broadRallyDay ? gapFromYesterday < 12 : gapFromYesterday < 18;
-      return gapFromYesterday >= (broadRallyDay ? 1.5 : 0.5) && s.curr > s.prev && notExtended && rsiOk && volOk;
+      var notExtended = gapFromYesterday < (broadRallyDay ? 18 : 12);
+      return gapFromYesterday >= (broadRallyDay ? 1.5 : 0.5) && s.curr > s.prev && notExtended && rsiOk;
     }
   }).sort(function(a,b){
     var gA = ((a.curr-a.prev)/a.prev)*100;
@@ -1130,12 +1129,13 @@ async function runGapAnalysis(data) {
     "",
     "RULES:",
     "1. RSI between 50-82 — momentum zone. RSI above 82 = skip (overbought).",
-    broadRallyDay
-      ? "2. Volume: BROAD RALLY DAY — volume naturally lower. Accept 0.5x+. Focus on relative strength vs peers instead."
-      : "2. Volume at least 0.9x average — confirms buying is real.",
+    "2. Volume is INFORMATIONAL only — do not hard-filter on volume. Note it in your reason.",
+    "   Low volume (< 0.5x) = flag as higher risk but do NOT auto-skip.",
+    "   High volume (> 1.5x) = stronger conviction, boost confidence.",
     "3. "+maxTarget+" MORE upside from CURRENT price before market close.",
     "4. Stock has NOT already run more than "+(broadRallyDay?"18":"12")+"% from its open today.",
-    "5. Confidence 85+ only.",
+    "5. Must have a clear reason for the gap — sector momentum, catalyst, or relative strength.",
+    "6. Confidence 85+ only. If volume is low, require stronger RSI + catalyst to compensate.",
     "",
     "If no stock qualifies return empty setups array.",
     "",
