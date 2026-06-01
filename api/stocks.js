@@ -62,7 +62,11 @@ export default async function handler(req, res) {
       .filter(t => {
         const s = snapMap[t];
         if (!s) return false;
-        if (!marketOpen) return true;
+        // Weekend: no moves — but still fetch RSI/ATR for prep
+        const nowET2    = new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
+        const isWeekend2= nowET2.getDay()===0 || nowET2.getDay()===6;
+        if (isWeekend2) return true;
+        // Market hours OR after-hours weekday — use today's change
         return Math.abs(s.todaysChangePerc || 0) >= 0.5;
       })
       .sort((a,b) =>
@@ -152,15 +156,28 @@ export default async function handler(req, res) {
       const dayC     = day.c             || 0;
       const todayChg = snap.todaysChange || 0;
 
+      // Detect if it's actually a weekend (Saturday or Sunday)
+      const nowET      = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+      const dayOfWeek  = nowET.getDay(); // 0=Sun, 6=Sat
+      const isWeekend  = dayOfWeek === 0 || dayOfWeek === 6;
+
       let curr, priceSource;
       if (marketOpen) {
+        // During market hours — use live price
         if      (lastTP > 0) { curr = lastTP; priceSource = "last_trade"; }
         else if (minC   > 0) { curr = minC;   priceSource = "min_bar"; }
         else if (dayC   > 0) { curr = dayC;   priceSource = "day_close"; }
         else                 { curr = parseFloat((prevC + todayChg).toFixed(2)); priceSource = "calc"; }
-      } else {
+      } else if (isWeekend) {
+        // Actual weekend — use Friday's close (prevDay.c)
         curr        = prevC;
         priceSource = "prev_close_weekend";
+      } else {
+        // Weekday after market close (4pm-9:30am) — use TODAY's close (day.c)
+        // day.c is the official closing price set at 4pm
+        if      (dayC   > 0) { curr = dayC;   priceSource = "day_close_today"; }
+        else if (lastTP > 0) { curr = lastTP; priceSource = "last_trade_ah"; }
+        else                 { curr = prevC;   priceSource = "prev_close_fallback"; }
       }
       curr = parseFloat((curr||0).toFixed(2));
       const prev = parseFloat((prevC||0).toFixed(2));
