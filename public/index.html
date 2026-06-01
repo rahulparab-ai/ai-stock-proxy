@@ -899,14 +899,28 @@ async function runScan(){
   console.log("[Scanner] Exclusion report:", JSON.stringify(exclusionReport));
   window._lastExclusionReport = exclusionReport;
 
+  // Time-scaled target for dip scanner too
+  var now2       = new Date();
+  var etNow2     = new Date(now2.toLocaleString("en-US",{timeZone:"America/New_York"}));
+  var totalMin2  = etNow2.getHours()*60 + etNow2.getMinutes();
+  var minsLeftDip = Math.max(0, (15*60+30) - totalMin2); // mins to 3:30pm
+  var dipMinTarget, dipSharesNote;
+  if      (minsLeftDip >= 240) { dipMinTarget="$15"; dipSharesNote="full day ahead"; }
+  else if (minsLeftDip >= 180) { dipMinTarget="$10"; dipSharesNote="increase shares to 20-25 to hit $200"; }
+  else if (minsLeftDip >= 120) { dipMinTarget="$7";  dipSharesNote="increase shares to 28-30 to hit $200"; }
+  else if (minsLeftDip >= 60)  { dipMinTarget="$5";  dipSharesNote="increase shares to 40+ to hit $200"; }
+  else                         { dipMinTarget="$3";  dipSharesNote="large position 60+ shares, tight stop"; }
+
   const promptParts = [
     "Swing trader. Account $" + capital + ". Goal $" + dailyGoal + "/day.",
+    "TIME: " + minsLeftDip + " mins until 3:30pm. Minimum target per share: " + dipMinTarget + ". " + dipSharesNote + ".",
     sectorContext,
     "",
     "Analyze these stocks and return ONLY the ones worth acting on today.",
     "Use the sector health above to calibrate confidence — if sector is OVERBOUGHT, only flag highest conviction dips.",
     "DIP SCANNER: ONLY flag stocks trading BELOW yesterday close. PATH A: down >= 3% AND vol >= 0.8x. PATH B: down >= 1.5% AND RSI <= 45 AND vol >= 0.8x. Stocks UP today belong in Gap Up scanner. High volume on a DOWN move = bounce signal.",
     "WATCHING criteria: dip 0.8-1.5% with RSI 45-55 and falling, OR dip > 1.5% but RSI 45-60 (not yet oversold). Include exact triggerPrice.",
+    "Set targetPrice at minimum " + dipMinTarget + " above entry. Calculate shares needed to reach $" + dailyGoal + " profit.",
     "Skip everything else.",
     "",
     "DATA: " + topRows,
@@ -1115,11 +1129,32 @@ async function runGapAnalysis(data) {
       ? "⚠️ BROAD SELLOFF DAY: Market-wide selling. Gap ups are rare and likely dead-cat bounces — be very selective, confidence 90+ only."
       : "Normal market day — apply standard volume and RSI filters.";
 
-  // Time-aware criteria
-  var maxTarget = minsLeft < 60 ? "$8 minimum (time limited)" : "$15 minimum";
+  // Time-aware target — scales down as day progresses
+  // Goal is always $200. Fewer minutes = smaller target = more shares needed.
+  var minTarget, sharesNote;
+  if (minsLeft >= 240) {        // before 11am — full day ahead
+    minTarget  = "$15";
+    sharesNote = "Full day — target $15+, standard position size";
+  } else if (minsLeft >= 180) { // 11am-12pm
+    minTarget  = "$10";
+    sharesNote = "Morning — target $10+, increase shares to 20-25 to hit $200";
+  } else if (minsLeft >= 120) { // 12pm-1pm
+    minTarget  = "$7";
+    sharesNote = "Midday — target $7+, increase shares to 28-30 to hit $200";
+  } else if (minsLeft >= 60) {  // 1pm-2pm
+    minTarget  = "$5";
+    sharesNote = "Afternoon — target $5+, increase shares to 40+ to hit $200";
+  } else {                       // after 2pm
+    minTarget  = "$3";
+    sharesNote = "Late session — target $3+, large position 60+ shares, tight stop";
+  }
+  var maxTarget = minTarget + " minimum"; // keep variable name for prompt compat
+
   var timeContext = isEarly
-    ? "Market just opened. Look for fresh momentum with full day ahead."
-    : "Midday scan. Only "+minsLeft+" minutes left before 3:00pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 10% from open today, (2) RSI not overbought (below 78), (3) "+maxTarget+" upside still available from CURRENT price, (4) volume still confirming.";
+    ? "Market just opened. Full day ahead — look for momentum setups with $15+ upside target."
+    : "Scan at " + minsLeft + " mins before 3:00pm cutoff. " +
+      "IMPORTANT: Target is " + minTarget + " minimum (not $15) — use MORE SHARES to still reach $200/day goal. " + sharesNote + ". " +
+      "ONLY flag if: (1) stock has NOT already run more than 10% from open, (2) RSI not overbought (below 82), (3) " + minTarget + " upside still available, (4) clear momentum continuing.";
 
   var gapPromptParts = [
     "You are a momentum trader. "+timeContext,
@@ -1132,10 +1167,11 @@ async function runGapAnalysis(data) {
     "2. Volume is INFORMATIONAL only — do not hard-filter on volume. Note it in your reason.",
     "   Low volume (< 0.5x) = flag as higher risk but do NOT auto-skip.",
     "   High volume (> 1.5x) = stronger conviction, boost confidence.",
-    "3. "+maxTarget+" MORE upside from CURRENT price before market close.",
+    "3. Minimum target move: "+minTarget+" from current price. "+sharesNote+".",
     "4. Stock has NOT already run more than "+(broadRallyDay?"18":"12")+"% from its open today.",
     "5. Must have a clear reason for the gap — sector momentum, catalyst, or relative strength.",
     "6. Confidence 85+ only. If volume is low, require stronger RSI + catalyst to compensate.",
+    "7. For targetPrice: set at minumum "+minTarget+" above entry. For shares: calculate shares needed to make $"+dailyGoal+" profit at that target.",
     "",
     "If no stock qualifies return empty setups array.",
     "",
