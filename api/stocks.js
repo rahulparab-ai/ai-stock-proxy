@@ -72,11 +72,24 @@ export default async function handler(req, res) {
       return Math.abs(changePct) >= 0.5;
     });
 
-    // Only fetch RSI/ATR/news for top 30 movers by magnitude
-    // Snapshot covers all 120 in one call — indicators are one call each
-    const movers = allMovers
-      .sort((a,b) => Math.abs(snapMap[b]?.todaysChangePerc||0) - Math.abs(snapMap[a]?.todaysChangePerc||0))
-      .slice(0, 30);
+    // Sort by magnitude — biggest movers first (both up and down)
+    const moversSorted = allMovers
+      .sort((a,b) => Math.abs(snapMap[b]?.todaysChangePerc||0) - Math.abs(snapMap[a]?.todaysChangePerc||0));
+
+    // Top 50 get RSI (most important for gap up and dip decisions)
+    // Top 30 get ATR + avgVol + news (heavier calls)
+    const moversForRsi     = moversSorted.slice(0, 50);
+    const moversForDetails = moversSorted.slice(0, 30);
+    const movers           = moversSorted; // all movers used for result building
+
+    // ── DETECT BROAD MARKET RALLY ─────────────────────────────────
+    // If >50% of stocks are up >1%, this is a macro/news-driven rally day
+    // Volume will naturally be lower — adjust Claude's expectations
+    const allStocksSnap   = tickerList.map(t => snapMap[t]).filter(Boolean);
+    const upMoreThan1     = allStocksSnap.filter(s => (s.todaysChangePerc||0) > 1).length;
+    const broadRallyDay   = upMoreThan1 > (allStocksSnap.length * 0.5);
+    const downMoreThan1   = allStocksSnap.filter(s => (s.todaysChangePerc||0) < -1).length;
+    const broadSelloffDay = downMoreThan1 > (allStocksSnap.length * 0.5);
 
     // ── STEP 4: RSI + ATR + avgVol + NEWS in parallel ────────────
     const rsiMap    = {};
@@ -84,17 +97,26 @@ export default async function handler(req, res) {
     const avgVolMap = {};
     const newsMap   = {};
 
-    await Promise.all(movers.map(async ticker => {
+    // Fetch RSI for top 50 — in batches of 10 to avoid rate limit
+    const rsiBatches = [];
+    for (let i = 0; i < moversForRsi.length; i += 10) {
+      rsiBatches.push(moversForRsi.slice(i, i + 10));
+    }
+    for (const batch of rsiBatches) {
+      await Promise.all(batch.map(async ticker => {
+        try {
+          const rsiUrl =
+            `${BASE}/v1/indicators/rsi/${ticker}` +
+            `?timespan=day&adjusted=true&window=14&series_type=close&limit=1&apiKey=${POLY_KEY}`;
+          const rsiJson = await (await fetch(rsiUrl)).json();
+          const val = rsiJson?.results?.values?.[0]?.value;
+          rsiMap[ticker] = val ? parseFloat(val.toFixed(1)) : null;
+        } catch (_) { rsiMap[ticker] = null; }
+      }));
+    }
 
-      // RSI
-      try {
-        const rsiUrl =
-          `${BASE}/v1/indicators/rsi/${ticker}` +
-          `?timespan=day&adjusted=true&window=14&series_type=close&limit=1&apiKey=${POLY_KEY}`;
-        const rsiJson = await (await fetch(rsiUrl)).json();
-        const val = rsiJson?.results?.values?.[0]?.value;
-        rsiMap[ticker] = val ? parseFloat(val.toFixed(1)) : null;
-      } catch (_) { rsiMap[ticker] = null; }
+    // Fetch ATR + avgVol + news for top 30 in parallel
+    await Promise.all(moversForDetails.map(async ticker => {
 
       // ATR
       try {
@@ -275,12 +297,16 @@ export default async function handler(req, res) {
     });
 
     return res.status(200).json({
-      stocks:      results,
-      fetchedAt:   new Date().toISOString(),
-      source:      "polygon.io",
-      cached:      false,
+      stocks:          results,
+      fetchedAt:       new Date().toISOString(),
+      source:          "polygon.io",
+      cached:          false,
       marketOpen,
-      moversCount: movers.length,
+      moversCount:     movers.length,
+      broadRallyDay,
+      broadSelloffDay,
+      upMoreThan1Pct:  upMoreThan1,
+      downMoreThan1Pct: downMoreThan1,
     });
 
   } catch (err) {
