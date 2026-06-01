@@ -64,14 +64,19 @@ export default async function handler(req, res) {
     const to    = today.toISOString().split("T")[0];
 
     // ── STEP 3: Identify movers using todaysChangePerc ────────────
-    const movers = tickerList.filter(ticker => {
+    const allMovers = tickerList.filter(ticker => {
       const snap = snapMap[ticker];
       if (!snap) return false;
-      // Weekend: nothing is moving — still fetch RSI/ATR for all
       if (!marketOpen) return true;
       const changePct = snap.todaysChangePerc || 0;
       return Math.abs(changePct) >= 0.5;
     });
+
+    // Only fetch RSI/ATR/news for top 30 movers by magnitude
+    // Snapshot covers all 120 in one call — indicators are one call each
+    const movers = allMovers
+      .sort((a,b) => Math.abs(snapMap[b]?.todaysChangePerc||0) - Math.abs(snapMap[a]?.todaysChangePerc||0))
+      .slice(0, 30);
 
     // ── STEP 4: RSI + ATR + avgVol + NEWS in parallel ────────────
     const rsiMap    = {};
