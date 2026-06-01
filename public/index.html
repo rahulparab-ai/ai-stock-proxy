@@ -756,21 +756,21 @@ async function runScan(){
       const json=await resp.json();
       (json.stocks||[]).forEach(s=>{if(!s.error && !s.delisted)data[s.ticker]=s;});
 
-      // Warn about delisted tickers found in response
+      // Store market context for use in Claude prompts
+      window._broadRallyDay   = json.broadRallyDay   || false;
+      window._broadSelloffDay = json.broadSelloffDay  || false;
+      window._marketOpen      = json.marketOpen       || false;
+
+      // Warn about delisted tickers
       const delisted=(json.stocks||[]).filter(s=>s.delisted).map(s=>s.ticker);
-      if(delisted.length>0) showStatus("⚠️ Dead tickers detected: " + delisted.join(", ") + " — remove from watchlist","warn");
+      if(delisted.length>0) showStatus("⚠️ Dead tickers: " + delisted.join(", ") + " — remove from watchlist","warn");
 
       const failed=(json.stocks||[]).filter(s=>s.error&&!s.delisted).map(s=>s.ticker);
-
-      // Show market status + price source
       const mktOpen = json.marketOpen;
-      const mktMsg  = mktOpen
-        ? "🟢 MARKET OPEN — live prices (Polygon Starter)"
-        : "🔵 MARKET CLOSED — showing last close prices (Friday close on weekend)";
-      showStatus(
-        failed.length ? "⚠️ Data loaded. Missing: " + failed.join(", ") : mktMsg,
-        failed.length ? "warn" : "ok"
-      );
+      let mktMsg = mktOpen ? "🟢 MARKET OPEN — live prices (Polygon Starter)" : "🔵 MARKET CLOSED — showing last close prices";
+      if (json.broadRallyDay)   mktMsg = "🚀 BROAD MARKET RALLY DAY — " + json.upMoreThan1Pct + " stocks up >1% — volume naturally lower";
+      if (json.broadSelloffDay) mktMsg = "🔻 BROAD SELLOFF DAY — " + json.downMoreThan1Pct + " stocks down >1% — prime dip bounce day";
+      showStatus(failed.length ? "⚠️ Missing data: " + failed.join(", ") : mktMsg, failed.length ? "warn" : "ok");
       watchlist.forEach(t=>{if(!data[t])data[t]=simulateStock(t);});
     }catch(e){
       console.error("[Scan] Proxy fetch failed:", e.message, e);
@@ -828,6 +828,8 @@ async function runScan(){
 
   // Pass sector context to Claude
   var sectorContext = "SECTOR: avg RSI="+avgRsi+" ("+sectorMood+"), "+pctDown+"% stocks down, "+bigDips+" with 3%+ dips, "+stocksUp.length+" stocks up.";
+  if(window._broadRallyDay)   sectorContext += " BROAD RALLY DAY: >50% of stocks up >1% — dips are against market tide, higher bounce probability.";
+  if(window._broadSelloffDay) sectorContext += " BROAD SELLOFF DAY: >50% of stocks down >1% — prime dip bounce conditions, wait for volume confirmation.";
 
   // 3. Build prompt with news filter + position sizing request
   const pnlToday=todayPnL();
@@ -1057,23 +1059,27 @@ async function runGapAnalysis(data) {
 
   // Filter gap candidates
   // RULE 1: Must be up from yesterday
+  // ── BROAD MARKET CONTEXT ─────────────────────────────────────
+  var broadRallyDay   = window._broadRallyDay   || false;
+  var broadSelloffDay = window._broadSelloffDay  || false;
+
+  // RULE 1: Must be gapping up from yesterday
   // RULE 2: Must not have already moved too far from open (already extended)
-  // RULE 3: Volume must be 1.5x+ (strong continuation signal)
+  // RULE 3: Volume — on broad rally days volume is naturally lower, relax to 0.5x
+  var volMinGap = broadRallyDay ? 0.5 : 0.9; // relax on rally days
+  var gapMinPct = broadRallyDay ? 2.0 : 1.5;  // raise bar on rally days (everyone is up, need bigger move)
+
   var gapCandidates = Object.values(data).filter(function(s){
     if(!s.curr || !s.prev) return false;
     var gapFromYesterday = ((s.curr - s.prev) / s.prev) * 100;
-    // Volume now reliable — use it to confirm gap momentum
-    // RSI check: 50-78 = momentum zone
-    var rsiOk = !s.rsi || (s.rsi >= 50 && s.rsi <= 78);
-    var volOk = !s.volRatio || s.volRatio >= 0.9; // at least near-normal volume
+    var rsiOk = !s.rsi || (s.rsi >= 50 && s.rsi <= 82); // slightly wider on rally days
+    var volOk = s.volNull || !s.volRatio || s.volRatio >= volMinGap;
 
     if(isEarly){
-      // Open: fresh gap up 1.5%+ from yesterday, RSI in momentum zone
-      return gapFromYesterday >= 1.5 && s.curr > s.prev && rsiOk && volOk;
+      return gapFromYesterday >= gapMinPct && s.curr > s.prev && rsiOk && volOk;
     } else {
-      // Midday: up from yesterday, not over-extended (< 12%), RSI not overbought
-      var notExtended = gapFromYesterday < 12;
-      return gapFromYesterday >= 0.5 && s.curr > s.prev && notExtended && rsiOk && volOk;
+      var notExtended = !broadRallyDay ? gapFromYesterday < 12 : gapFromYesterday < 18;
+      return gapFromYesterday >= (broadRallyDay ? 1.5 : 0.5) && s.curr > s.prev && notExtended && rsiOk && volOk;
     }
   }).sort(function(a,b){
     var gA = ((a.curr-a.prev)/a.prev)*100;
@@ -1084,9 +1090,11 @@ async function runGapAnalysis(data) {
   if(gapCandidates.length === 0){
     return {
       verdict: "NO VALID GAP SETUPS",
-      summary: isEarly
-        ? "No stocks gapping up with sufficient volume (1.5x+) at open. Market opened flat or volume not confirming moves."
-        : "No stocks showing gap-up momentum with enough volume and runway remaining. Either moves are already extended or volume too low.",
+      summary: broadRallyDay
+        ? "Broad market rally day — all stocks up but no individual standouts with enough RSI momentum and relative strength. Risk of broad fade."
+        : isEarly
+          ? "No stocks gapping up with sufficient momentum at open. Market opened flat or moves not confirming."
+          : "No stocks showing gap-up momentum with runway remaining. Moves may be already extended.",
       timeMode: timeMode,
       timeWarning: timeWarning,
       setups: []
@@ -1097,32 +1105,42 @@ async function runGapAnalysis(data) {
   var gapRows = gapCandidates.map(function(s){
     var gap = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
     var openInfo = s.openPrice ? " open=$"+s.openPrice+" high=$"+s.todayHigh+" movedFromOpen="+s.gapFromOpen+"%" : "";
-    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" vol="+s.volRatio+"x RSI="+(s.rsi||"N/A");
-  }).join(", ");
+    var volStr = s.volNull ? "vol=early" : "vol="+(s.volRatio||"--")+"x";
+    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" "+volStr+" RSI="+(s.rsi||"N/A");
+  }).join("\n");
+
+  // Broad rally context for Claude
+  var marketContext = broadRallyDay
+    ? "⚠️ BROAD MARKET RALLY DAY: >50% of all tracked stocks are up >1% today. This is a macro/news-driven rally. Volume will be lower than normal across the board — do NOT penalize stocks for volume below 1x. Focus on: (1) strongest relative movers vs sector, (2) RSI not yet overbought (below 78), (3) stocks with specific catalysts (earnings, upgrade, product news) outperforming the rally. Avoid stocks just riding the tide with no specific catalyst."
+    : broadSelloffDay
+      ? "⚠️ BROAD SELLOFF DAY: Market-wide selling. Gap ups are rare and likely dead-cat bounces — be very selective, confidence 90+ only."
+      : "Normal market day — apply standard volume and RSI filters.";
 
   // Time-aware criteria
   var maxTarget = minsLeft < 60 ? "$8 minimum (time limited)" : "$15 minimum";
   var timeContext = isEarly
     ? "Market just opened. Look for fresh momentum with full day ahead."
-    : "Midday scan. Only "+minsLeft+" minutes left before 3:00pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 10% from open today, (2) RSI not overbought (below 75), (3) "+maxTarget+" upside still available from CURRENT price, (4) volume still above average confirming continuation.";
+    : "Midday scan. Only "+minsLeft+" minutes left before 3:00pm cutoff. ONLY flag if: (1) stock has NOT already moved more than 10% from open today, (2) RSI not overbought (below 78), (3) "+maxTarget+" upside still available from CURRENT price, (4) volume still confirming.";
 
   var gapPromptParts = [
     "You are a momentum trader. "+timeContext,
     "Account: $"+capital+". Goal: $"+dailyGoal+"/day.",
     "",
-    "STRICT RULES - ALL must be true to flag:",
-    "1. RSI between 50-78 — momentum zone, not overbought. RSI above 78 = skip.",
-    "2. Volume at least 1.2x average — confirms institutional buying behind the gap.",
-    "2. RSI between 50-70 - has momentum but not overbought",
-    "3. "+maxTarget+" MORE upside from CURRENT price before market close",
-    "4. Stock has NOT already run more than 12% from its open today (high-momentum AI stocks like PLTR NVDA can run 8-10% and keep going)",
-    "5. Clear catalyst or sector momentum supporting the move",
-    "6. Confidence 85+ only",
+    marketContext,
     "",
-    "If time is midday, entryPrice = current price right now. Target must be reachable before 3:30pm.",
+    "RULES:",
+    "1. RSI between 50-82 — momentum zone. RSI above 82 = skip (overbought).",
+    broadRallyDay
+      ? "2. Volume: BROAD RALLY DAY — volume naturally lower. Accept 0.5x+. Focus on relative strength vs peers instead."
+      : "2. Volume at least 0.9x average — confirms buying is real.",
+    "3. "+maxTarget+" MORE upside from CURRENT price before market close.",
+    "4. Stock has NOT already run more than "+(broadRallyDay?"18":"12")+"% from its open today.",
+    "5. Confidence 85+ only.",
+    "",
     "If no stock qualifies return empty setups array.",
     "",
-    "STOCKS: "+gapRows,
+    "STOCKS (one per line):",
+    gapRows,
     "",
     "Return compact JSON only:",
     "{",
