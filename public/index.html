@@ -918,10 +918,26 @@ async function runScan(){
     "",
     "Analyze these stocks and return ONLY the ones worth acting on today.",
     "Use the sector health above to calibrate confidence — if sector is OVERBOUGHT, only flag highest conviction dips.",
-    "DIP SCANNER: ONLY flag stocks trading BELOW yesterday close. PATH A: down >= 3% AND vol >= 0.8x. PATH B: down >= 1.5% AND RSI <= 45 AND vol >= 0.8x. Stocks UP today belong in Gap Up scanner. High volume on a DOWN move = bounce signal.",
-    "WATCHING criteria: dip 0.8-1.5% with RSI 45-55 and falling, OR dip > 1.5% but RSI 45-60 (not yet oversold). Include exact triggerPrice.",
+    "",
+    "DIP SCANNER RULES:",
+    "PATH A (Strong): dip >= 3% AND vol >= 0.8x — bypasses RSI check",
+    "PATH B (Normal): dip >= 1.5% AND RSI <= 45 AND vol >= 0.8x",
+    "WATCHING: dip 0.8-1.5% with RSI 45-55 falling. Include exact triggerPrice.",
+    "Stocks UP today belong in Gap Up scanner — skip them here.",
+    "",
+    "HOLD TYPE — you must classify every BUY trade as one of:",
+    "  SAME_DAY: bounce expected before 3:30pm today.",
+    "    Signals: dip happening before 12pm, volume spike showing reversal starting, RSI already turning up, stock near support.",
+    "    Stop loss: tighter (entry - ATR*0.25) — you can monitor and cut quickly.",
+    "    Target: reachable within hours.",
+    "",
+    "  OVERNIGHT: buy today, sell tomorrow morning at open.",
+    "    Signals: dip late in day (after 1pm), RSI deeply oversold (below 38), strong sector stock, dip likely continues then reverses overnight.",
+    "    Stop loss: wider (entry - ATR*0.4) — stock needs room to breathe overnight without triggering stop.",
+    "    Target: tomorrow morning gap up — typically 60-80% of the dip recovered.",
+    "    IMPORTANT: only flag OVERNIGHT if RSI < 38 OR dip > 4% with clear institutional support.",
+    "",
     "Set targetPrice at minimum " + dipMinTarget + " above entry. Calculate shares needed to reach $" + dailyGoal + " profit.",
-    "Skip everything else.",
     "",
     "DATA: " + topRows,
     "",
@@ -932,10 +948,12 @@ async function runScan(){
     "  marketMood: one sentence,",
     "  tomorrowWatch: one sentence,",
     "  trades: [",
-    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, riskLevel, triggerPrice}",
+    "    {ticker, tier, score, action, entryPrice, targetPrice, stopLoss, reason, newsFlag, riskLevel, triggerPrice, holdType, holdReason}",
     "  ]",
     "}",
     "",
+    "holdType: must be exactly SAME_DAY or OVERNIGHT for BUY tier. WATCHING tier leave null.",
+    "holdReason: one sentence explaining why same day or overnight. Example: 'RSI 28 deeply oversold, late day dip — expect gap up at tomorrow open' or 'High volume reversal starting at 10am — bounce likely today'.",
     "Keep trades array SHORT - max 8 entries. Only include BUY and WATCHING tiers.",
     "Raw JSON only. No markdown. No explanation."
   ];
@@ -1297,7 +1315,10 @@ function renderGapResult(gapResult, data, container) {
         html += '</div>';
       }
 
-      html += '<button class="log-btn" style="border-color:#a855f733;color:#c084fc" onclick="prefillJournal(&quot;'+setup.ticker+'&quot;,'+setup.entryPrice+','+setup.targetPrice+')">+ LOG THIS TRADE</button>';
+      html += '<div style="display:flex;gap:8px;margin-top:4px;">';
+      html += '<button class="log-btn" style="flex:1;border-color:#a855f733;color:#c084fc" onclick="prefillJournal(&quot;'+setup.ticker+'&quot;,'+setup.entryPrice+','+setup.targetPrice+')">+ LOG TRADE</button>';
+      html += '<button class="log-btn" style="flex:1;border-color:#00e5a033;color:#00e5a0" onclick="addToHoldCheck(&quot;'+setup.ticker+'&quot;,'+setup.entryPrice+')">+ ADD TO 3:30 CHECK</button>';
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -1358,6 +1379,21 @@ function renderResult(result,data){
       html += '<span class="pill ' + riskClass + '">' + (trade.riskLevel||"") + ' RISK</span>';
       html += '<span style="font-size:9px;color:#2a3045;margin-left:auto">' + (trade.holdDays||"1-2") + 'd</span>';
       html += '</div>';
+
+      // Hold type badge — most important info for the trader
+      if(trade.holdType){
+        var isSameDay  = trade.holdType === "SAME_DAY";
+        var holdColor  = isSameDay ? "#00e5a0" : "#a855f7";
+        var holdBg     = isSameDay ? "#00e5a011" : "#a855f711";
+        var holdBorder = isSameDay ? "#00e5a033" : "#a855f733";
+        var holdIcon   = isSameDay ? "⚡" : "🌙";
+        var holdLabel  = isSameDay ? "SAME DAY TRADE — Exit by 3:30pm today" : "OVERNIGHT HOLD — Sell tomorrow morning at open";
+        html += '<div style="background:'+holdBg+';border:1px solid '+holdBorder+';border-radius:7px;padding:8px 12px;margin-bottom:8px;">';
+        html += '<div style="font-size:10px;font-weight:800;color:'+holdColor+';letter-spacing:1px">'+holdIcon+' '+holdLabel+'</div>';
+        if(trade.holdReason) html += '<div style="font-size:10px;color:'+holdColor+'99;margin-top:3px">'+trade.holdReason+'</div>';
+        html += '</div>';
+      }
+
       html += '<div class="trade-reason">' + (trade.reason||"") + '</div>';
       html += '<div class="' + newsClass + '">NEWS: ' + (trade.newsFlag||"") + ' - ' + (trade.newsSummary||"") + '</div>';
       html += '<div class="price-grid">';
@@ -1377,10 +1413,14 @@ function renderResult(result,data){
         html += '<div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:#00e5a0">$' + pos.expectedProfit + '</div></div>';
         html += '<div class="pos-cell"><div class="pos-label">MAX LOSS</div><div class="pos-val" style="color:#ff4444">$' + pos.maxRisk + '</div></div>';
         html += '</div>';
-        html += '<div style="font-size:10px;color:#2a3045">R:R = 1:' + pos.rr + ' Buy ' + pos.shares + ' @ $' + trade.entryPrice + ' target $' + trade.targetPrice + '</div>';
+        var holdNote = trade.holdType==="OVERNIGHT" ? "Hold overnight — sell at tomorrow open" : "Exit by 3:30pm today";
+        html += '<div style="font-size:10px;color:#2a3045">R:R = 1:' + pos.rr + ' Buy ' + pos.shares + ' @ $' + trade.entryPrice + ' target $' + trade.targetPrice + ' — ' + holdNote + '</div>';
         html += '</div>';
       }
-      html += '<button class="log-btn" onclick="quickLog(' + tradeIdx + ')">+ LOG THIS TRADE</button>';
+      html += '<div style="display:flex;gap:8px;margin-top:4px;">';
+      html += '<button class="log-btn" style="flex:1" onclick="quickLog(' + tradeIdx + ')">+ LOG TRADE</button>';
+      html += '<button class="log-btn" style="flex:1;border-color:#a855f733;color:#c084fc" onclick="addToHoldCheck(&quot;' + trade.ticker + '&quot;,' + trade.entryPrice + ')">+ ADD TO 3:30 CHECK</button>';
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -1679,6 +1719,34 @@ function addPosition(){
   document.getElementById("hs-shares").value="";
   document.getElementById("hs-buyprice").value="";
   renderOpenPositions();
+}
+
+// One-tap add to 3:30 checker from any trade card
+// Prompts for shares only — entry price already known from the card
+function addToHoldCheck(ticker, entryPrice){
+  var sharesInput = prompt("How many shares of "+ticker+" did you buy @ $"+entryPrice+"?");
+  if(!sharesInput) return;
+  var shares = parseFloat(sharesInput);
+  if(isNaN(shares) || shares <= 0){ alert("Invalid number of shares."); return; }
+  if(openPositions.find(function(p){ return p.ticker===ticker; })){
+    alert(ticker+" is already in your 3:30 Check list.");
+    showTab("holdcheck");
+    return;
+  }
+  openPositions.push({
+    ticker:   ticker,
+    shares:   shares,
+    buyPrice: entryPrice,
+    addedAt:  new Date().toISOString(),
+    source:   "scanner"
+  });
+  localStorage.setItem("openPositions", JSON.stringify(openPositions));
+  renderOpenPositions();
+  // Switch to 3:30 Check tab so user can see it was added
+  showTab("holdcheck");
+  // Show confirmation
+  var confirmEl = document.getElementById("hs-results");
+  if(confirmEl) confirmEl.innerHTML = '<div style="background:#00e5a011;border:1px solid #00e5a033;border-radius:8px;padding:12px;margin-bottom:10px;font-size:11px;color:#00e5a0">✅ Added '+ticker+' — '+shares+' shares @ $'+entryPrice+'. Run check at 3:30pm.</div>';
 }
 
 function removePosition(ticker){
