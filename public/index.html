@@ -761,6 +761,39 @@ async function runScan(){
       window._broadSelloffDay = json.broadSelloffDay  || false;
       window._marketOpen      = json.marketOpen       || false;
 
+      // ── BASELINE SCAN STORAGE ────────────────────────────────────
+      // Store first scan after 9:49am as the day's baseline
+      // Used to track momentum continuation on subsequent scans
+      const etNowBase  = new Date(new Date().toLocaleString("en-US",{timeZone:"America/New_York"}));
+      const etMinsBase = etNowBase.getHours()*60 + etNowBase.getMinutes();
+      const todayKey   = etNowBase.toISOString().split("T")[0]; // YYYY-MM-DD
+      const baselineKey= "baseline_" + todayKey;
+      const savedBaseline = JSON.parse(localStorage.getItem(baselineKey)||"null");
+
+      // Save baseline if: after 9:49am, market open, no baseline yet for today
+      if(etMinsBase >= 589 && json.marketOpen && !savedBaseline) {
+        const baselineData = {};
+        (json.stocks||[]).forEach(s => {
+          if(!s.error && !s.delisted && s.curr) {
+            baselineData[s.ticker] = {
+              price: s.curr,
+              dipPct: s.dipPct,
+              rsi: s.rsi,
+              vol: s.vol,
+              ts: new Date().toISOString()
+            };
+          }
+        });
+        localStorage.setItem(baselineKey, JSON.stringify(baselineData));
+        localStorage.setItem("baseline_date", todayKey);
+        window._baseline = baselineData;
+        console.log("[Baseline] Saved first scan at", etNowBase.toLocaleTimeString(), "—", Object.keys(baselineData).length, "stocks");
+      } else if(savedBaseline) {
+        window._baseline = savedBaseline;
+      } else {
+        window._baseline = {};
+      }
+
       // Warn about delisted tickers
       const delisted=(json.stocks||[]).filter(s=>s.delisted).map(s=>s.ticker);
       if(delisted.length>0) showStatus("⚠️ Dead tickers: " + delisted.join(", ") + " — remove from watchlist","warn");
@@ -1094,23 +1127,37 @@ async function runGapAnalysis(data) {
   // ── BROAD MARKET CONTEXT ─────────────────────────────────────
   var broadRallyDay   = window._broadRallyDay   || false;
   var broadSelloffDay = window._broadSelloffDay  || false;
+  var baseline        = window._baseline         || {};
 
   // GAP UP PRE-FILTER — Stage 1
-  // Volume intentionally NOT filtered here — gap itself is the signal
-  // Volume builds through the day — Claude evaluates it in Stage 2
-  // We filter only: direction (must be up), RSI (not overbought), extension (not already run too far)
-  var gapMinPct = broadRallyDay ? 2.0 : 1.5; // higher bar on rally days — everyone is up
+  // Extension check uses movedFromOpen NOT gapFromYesterday
+  // Reason: MRVL opens at $253 (+22% from yesterday) but only moves 6% from open
+  //         gapFromYesterday filter would block it — movedFromOpen correctly allows it
+  // Tier 1: Normal gap (< 8% from yesterday) — standard rules
+  // Tier 2: Catalyst gap (>= 8% from yesterday) — check movedFromOpen instead
+  var gapMinPct = broadRallyDay ? 2.0 : 1.5;
 
   var gapCandidates = Object.values(data).filter(function(s){
     if(!s.curr || !s.prev) return false;
     var gapFromYesterday = ((s.curr - s.prev) / s.prev) * 100;
+    var movedFromOpen    = s.openPrice > 0 ? Math.abs(((s.curr - s.openPrice) / s.openPrice) * 100) : 0;
     var rsiOk = !s.rsi || (s.rsi >= 50 && s.rsi <= 82);
+    if(s.curr <= s.prev) return false; // must be up from yesterday
+
+    var isCatalystGap = gapFromYesterday >= 8; // big gap = earnings/news driven
 
     if(isEarly){
-      return gapFromYesterday >= gapMinPct && s.curr > s.prev && rsiOk;
+      // At open: any gap up with RSI ok
+      return gapFromYesterday >= gapMinPct && rsiOk;
     } else {
-      var notExtended = gapFromYesterday < (broadRallyDay ? 18 : 12);
-      return gapFromYesterday >= (broadRallyDay ? 1.5 : 0.5) && s.curr > s.prev && notExtended && rsiOk;
+      if(isCatalystGap){
+        // Tier 2 — catalyst gap: only block if moved > 15% FROM OPEN (truly extended)
+        return movedFromOpen < 15 && rsiOk;
+      } else {
+        // Tier 1 — normal gap: check gapFromYesterday not too extended
+        return gapFromYesterday >= (broadRallyDay ? 1.5 : 0.5) &&
+               gapFromYesterday < (broadRallyDay ? 18 : 10) && rsiOk;
+      }
     }
   }).sort(function(a,b){
     var gA = ((a.curr-a.prev)/a.prev)*100;
@@ -1134,18 +1181,25 @@ async function runGapAnalysis(data) {
 
   // Build prompt with time-aware rules
   var gapRows = gapCandidates.map(function(s){
-    var gap = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
-    var openInfo = s.openPrice ? " open=$"+s.openPrice+" high=$"+s.todayHigh+" movedFromOpen="+s.gapFromOpen+"%" : "";
-    var volStr = s.volNull ? "vol=early" : "vol="+(s.volRatio||"--")+"x";
-    return s.ticker+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"%"+openInfo+" "+volStr+" RSI="+(s.rsi||"N/A");
+    var gap        = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
+    var fromOpen   = s.openPrice > 0 ? (((s.curr-s.openPrice)/s.openPrice)*100).toFixed(2) : "N/A";
+    var volStr     = s.volNull ? "vol=early" : "vol="+(s.volRatio||"--")+"x";
+    var isCatalyst = parseFloat(gap) >= 8 ? " [CATALYST GAP]" : "";
+    var baseStr    = "";
+    if(baseline[s.ticker] && baseline[s.ticker].price){
+      var bPrice = baseline[s.ticker].price;
+      var bDelta = parseFloat((s.curr - bPrice).toFixed(2));
+      baseStr = " baseline=$"+bPrice+"("+(bDelta>=0?"+":"")+bDelta+" since first scan)";
+    }
+    return s.ticker+isCatalyst+": NOW $"+s.curr+" prev $"+s.prev+" gap=+"+gap+"% fromOpen="+fromOpen+"% open=$"+(s.openPrice||"N/A")+" "+volStr+" RSI="+(s.rsi||"N/A")+baseStr;
   }).join("\n");
 
   // Broad rally context for Claude
   var marketContext = broadRallyDay
-    ? "⚠️ BROAD MARKET RALLY DAY: >50% of all tracked stocks are up >1% today. This is a macro/news-driven rally. Volume will be lower than normal across the board — do NOT penalize stocks for volume below 1x. Focus on: (1) strongest relative movers vs sector, (2) RSI not yet overbought (below 78), (3) stocks with specific catalysts (earnings, upgrade, product news) outperforming the rally. Avoid stocks just riding the tide with no specific catalyst."
+    ? "⚠️ BROAD MARKET RALLY DAY: >50% of all tracked stocks are up >1%. Volume naturally lower — do NOT penalize for low volume. Focus on relative strength and specific catalysts."
     : broadSelloffDay
-      ? "⚠️ BROAD SELLOFF DAY: Market-wide selling. Gap ups are rare and likely dead-cat bounces — be very selective, confidence 90+ only."
-      : "Normal market day — apply standard volume and RSI filters.";
+      ? "⚠️ BROAD SELLOFF DAY: Gap ups are rare — be very selective, 90+ confidence only."
+      : "Normal market day — apply standard RSI and momentum filters.";
 
   // Time-aware target — scales down as day progresses
   // User decides how many shares to buy — we just need $X per share minimum
@@ -1178,18 +1232,23 @@ async function runGapAnalysis(data) {
     "",
     marketContext,
     "",
-    "RULES:",
-    "1. RSI between 50-82 — momentum zone. RSI above 82 = skip (overbought).",
-    "2. Volume is INFORMATIONAL only — do not hard-filter on volume. Note it in your reason.",
-    "   Low volume (< 0.5x) = flag as higher risk but do NOT auto-skip.",
-    "   High volume (> 1.5x) = stronger conviction, boost confidence.",
-    "3. Minimum "+minTarget+" upside remaining from current price. "+sharesNote+".",
-    "4. Stock has NOT already run more than "+(broadRallyDay?"18":"12")+"% from its open today.",
-    "5. Must have a clear reason for the gap — sector momentum, catalyst, or relative strength.",
-    "6. Confidence 85+ only. If volume is low, require stronger RSI + catalyst to compensate.",
-    "7. Set targetPrice at minimum "+minTarget+" above entry. Trader will size position themselves.",
+    "TWO TYPES OF GAP — evaluate differently:",
+    "NORMAL GAP (< 8% from yesterday): standard momentum setup.",
+    "  - RSI 50-82, clear direction, some volume confirming",
+    "CATALYST GAP (>= 8% from yesterday, marked [CATALYST GAP]): earnings/news repricing.",
+    "  - Stock opened at new price level — gap from yesterday is IRRELEVANT",
+    "  - Only check: movedFromOpen < 15% (room to continue from open)",
+    "  - RSI can be higher (up to 82) — earnings momentum runs hot",
+    "  - baseline delta shows how much it moved since first scan — positive = still trending",
+    "  - These are your BEST setups — stock repriced, institutions still buying",
     "",
-    "If no stock qualifies return empty setups array.",
+    "RULES FOR ALL:",
+    "1. RSI between 50-82. Above 82 = skip.",
+    "2. Volume informational only — note it but do not auto-skip on low volume.",
+    "3. Minimum "+minTarget+" upside remaining. "+sharesNote+".",
+    "4. Confidence 85+ only.",
+    "5. If baseline delta is positive = stock still moving up since first scan = stronger signal.",
+    "6. If baseline delta is negative = stock fading = lower confidence or skip.",
     "",
     "STOCKS (one per line):",
     gapRows,
@@ -1496,6 +1555,13 @@ function renderResult(result,data){
       html += ' RSI:<span style="color:' + ((s.rsi||99)<=45?"#00e5a0":(s.rsi||99)<=60?"#f4c430":"#ff4444") + '">' + (s.rsi||"--") + '</span>';
       html += ' Vol:<span style="color:' + (s.volNull?"#f4c430":(s.volRatio||0)>=0.8?"#00e5a0":"#ff4444") + '">' + (s.volNull?"early":((s.volRatio||"--")+"x")) + '</span>';
       if(s.atr) html += ' ATR:<span style="color:#a855f7">$' + s.atr + '</span>';
+      // Baseline delta
+      var bl = (window._baseline||{})[s.ticker];
+      if(bl && bl.price && s.curr){
+        var blDelta = parseFloat((s.curr - bl.price).toFixed(2));
+        var blColor = blDelta >= 0 ? "#00e5a0" : "#ff4444";
+        html += ' <span style="color:'+blColor+'">'+(blDelta>=0?'▲+':'▼')+blDelta+' from 1st scan</span>';
+      }
       html += '</div>';
       if(!s.sentToClaude && s.buyReasons && s.buyReasons.length>0){
         html += '<div style="font-size:9px;color:#ff444488;margin-top:1px">↳ ' + s.buyReasons[0] + '</div>';
