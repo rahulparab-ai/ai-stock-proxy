@@ -1148,31 +1148,29 @@ async function runGapAnalysis(data) {
       : "Normal market day — apply standard volume and RSI filters.";
 
   // Time-aware target — scales down as day progresses
-  // Goal is always $200. Fewer minutes = smaller target = more shares needed.
+  // User decides how many shares to buy — we just need $X per share minimum
   var minTarget, sharesNote;
-  if (minsLeft >= 240) {        // before 11am — full day ahead
-    minTarget  = "$15";
-    sharesNote = "Full day — target $15+, standard position size";
-  } else if (minsLeft >= 180) { // 11am-12pm
-    minTarget  = "$10";
-    sharesNote = "Morning — target $10+, increase shares to 20-25 to hit $200";
-  } else if (minsLeft >= 120) { // 12pm-1pm
-    minTarget  = "$7";
-    sharesNote = "Midday — target $7+, increase shares to 28-30 to hit $200";
-  } else if (minsLeft >= 60) {  // 1pm-2pm
+  if (minsLeft >= 240) {        // before 11am
     minTarget  = "$5";
-    sharesNote = "Afternoon — target $5+, increase shares to 40+ to hit $200";
+    sharesNote = "Full day ahead — target $5+ minimum, buy enough shares to hit $200";
+  } else if (minsLeft >= 180) { // 11am-12pm
+    minTarget  = "$5";
+    sharesNote = "target $5+, increase shares to 40 to hit $200";
+  } else if (minsLeft >= 120) { // 12pm-1pm
+    minTarget  = "$5";
+    sharesNote = "target $5+, increase shares to 40+ to hit $200";
+  } else if (minsLeft >= 60) {  // 1pm-2pm
+    minTarget  = "$4";
+    sharesNote = "target $4+, increase shares to 50+ to hit $200";
   } else {                       // after 2pm
     minTarget  = "$3";
-    sharesNote = "Late session — target $3+, large position 60+ shares, tight stop";
+    sharesNote = "late session, target $3+, large position 65+ shares, tight stop";
   }
-  var maxTarget = minTarget + " minimum"; // keep variable name for prompt compat
 
-  var timeContext = isEarly
-    ? "Market just opened. Full day ahead — look for momentum setups with $15+ upside target."
-    : "Scan at " + minsLeft + " mins before 3:00pm cutoff. " +
-      "IMPORTANT: Target is " + minTarget + " minimum (not $15) — use MORE SHARES to still reach $200/day goal. " + sharesNote + ". " +
-      "ONLY flag if: (1) stock has NOT already run more than 10% from open, (2) RSI not overbought (below 82), (3) " + minTarget + " upside still available, (4) clear momentum continuing.";
+  var timeContext = "Scan at " + minsLeft + " mins before 3:00pm cutoff. " +
+    "Minimum target: " + minTarget + " per share — trader will size position to hit $200 goal. " + sharesNote + ". " +
+    "Flag ANY stock with " + minTarget + "+ upside remaining, clear momentum, and RSI not overbought. " +
+    "Do NOT skip setups just because target seems small — trader controls share count.";
 
   var gapPromptParts = [
     "You are a momentum trader. "+timeContext,
@@ -1185,11 +1183,11 @@ async function runGapAnalysis(data) {
     "2. Volume is INFORMATIONAL only — do not hard-filter on volume. Note it in your reason.",
     "   Low volume (< 0.5x) = flag as higher risk but do NOT auto-skip.",
     "   High volume (> 1.5x) = stronger conviction, boost confidence.",
-    "3. Minimum target move: "+minTarget+" from current price. "+sharesNote+".",
+    "3. Minimum "+minTarget+" upside remaining from current price. "+sharesNote+".",
     "4. Stock has NOT already run more than "+(broadRallyDay?"18":"12")+"% from its open today.",
     "5. Must have a clear reason for the gap — sector momentum, catalyst, or relative strength.",
     "6. Confidence 85+ only. If volume is low, require stronger RSI + catalyst to compensate.",
-    "7. For targetPrice: set at minumum "+minTarget+" above entry. For shares: calculate shares needed to make $"+dailyGoal+" profit at that target.",
+    "7. Set targetPrice at minimum "+minTarget+" above entry. Trader will size position themselves.",
     "",
     "If no stock qualifies return empty setups array.",
     "",
