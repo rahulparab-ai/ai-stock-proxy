@@ -1278,9 +1278,11 @@ function renderGapResult(gapResult, data, container) {
       var sd       = data[setup.ticker]||{};
       var confColor= setup.confidence>=90?"#00e5a0":"#f4c430";
       var confClass= setup.riskLevel==="Low"?"conf-high":"conf-med";
-      var shares   = setup.expectedGain>0 ? Math.ceil(dailyGoal/setup.expectedGain) : "--";
-      var totalCost= shares!=="--" ? "$"+(shares*setup.entryPrice).toLocaleString() : "--";
-      var profit   = shares!=="--" ? "$"+(shares*setup.expectedGain).toFixed(0) : "--";
+      // Always calculate gain per share from entry/target — never trust Claude's expectedGain field
+      var gainPerShare = parseFloat((parseFloat(setup.targetPrice||0) - parseFloat(setup.entryPrice||0)).toFixed(2));
+      var shares   = gainPerShare > 0 ? Math.ceil(dailyGoal / gainPerShare) : "--";
+      var totalCost= shares !== "--" ? "$" + (shares * parseFloat(setup.entryPrice)).toFixed(2) : "--";
+      var profit   = shares !== "--" ? "$" + (shares * gainPerShare).toFixed(0) : "--";
 
       html += '<div class="gap-card">';
       html += '<div class="gap-head">';
@@ -1297,7 +1299,7 @@ function renderGapResult(gapResult, data, container) {
       html += '<div class="price-cell"><div class="price-label">ENTRY</div><div class="price-val" style="color:#c084fc">$'+setup.entryPrice+'</div></div>';
       html += '<div class="price-cell"><div class="price-label">TARGET</div><div class="price-val" style="color:#00e5a0">$'+setup.targetPrice+'</div></div>';
       html += '<div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:#ff4444">$'+setup.stopLoss+'</div></div>';
-      html += '<div class="price-cell"><div class="price-label">GAIN/SHARE</div><div class="price-val" style="color:#00e5a0">$'+setup.expectedGain+'</div></div>';
+      html += '<div class="price-cell"><div class="price-label">GAIN/SHARE</div><div class="price-val" style="color:#00e5a0">$'+gainPerShare.toFixed(2)+'</div></div>';
       html += '<div class="price-cell"><div class="price-label">VOL RATIO</div><div class="price-val" style="color:'+((sd.volRatio||0)>=1.5?"#00e5a0":"#f4c430")+'">'+(sd.volRatio||"--")+'x</div></div>';
       html += '<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:#f4c430">'+(sd.rsi||"--")+'</div></div>';
       html += '</div>';
