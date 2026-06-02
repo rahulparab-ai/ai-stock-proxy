@@ -1317,7 +1317,7 @@ function renderGapResult(gapResult, data, container) {
 
       html += '<div style="display:flex;gap:8px;margin-top:4px;">';
       html += '<button class="log-btn" style="flex:1;border-color:#a855f733;color:#c084fc" onclick="prefillJournal(&quot;'+setup.ticker+'&quot;,'+setup.entryPrice+','+setup.targetPrice+')">+ LOG TRADE</button>';
-      html += '<button class="log-btn" style="flex:1;border-color:#00e5a033;color:#00e5a0" onclick="addToHoldCheck(&quot;'+setup.ticker+'&quot;,'+setup.entryPrice+')">+ ADD TO 3:30 CHECK</button>';
+      html += '<button class="log-btn" style="flex:1;border-color:#00e5a033;color:#00e5a0" onclick="addToHoldCheck(&quot;'+setup.ticker+'&quot;,'+setup.entryPrice+','+(shares!=="--"?shares:1)+')">+ ADD TO 3:30 CHECK</button>';
       html += '</div>';
       html += '</div>';
     });
@@ -1419,7 +1419,7 @@ function renderResult(result,data){
       }
       html += '<div style="display:flex;gap:8px;margin-top:4px;">';
       html += '<button class="log-btn" style="flex:1" onclick="quickLog(' + tradeIdx + ')">+ LOG TRADE</button>';
-      html += '<button class="log-btn" style="flex:1;border-color:#a855f733;color:#c084fc" onclick="addToHoldCheck(&quot;' + trade.ticker + '&quot;,' + trade.entryPrice + ')">+ ADD TO 3:30 CHECK</button>';
+      html += '<button class="log-btn" style="flex:1;border-color:#a855f733;color:#c084fc" onclick="addToHoldCheck(&quot;' + trade.ticker + '&quot;,' + trade.entryPrice + ',' + (pos ? pos.shares : 1) + ')">+ ADD TO 3:30 CHECK</button>';
       html += '</div>';
       html += '</div>';
     });
@@ -1722,12 +1722,9 @@ function addPosition(){
 }
 
 // One-tap add to 3:30 checker from any trade card
-// Prompts for shares only — entry price already known from the card
-function addToHoldCheck(ticker, entryPrice){
-  var sharesInput = prompt("How many shares of "+ticker+" did you buy @ $"+entryPrice+"?");
-  if(!sharesInput) return;
-  var shares = parseFloat(sharesInput);
-  if(isNaN(shares) || shares <= 0){ alert("Invalid number of shares."); return; }
+// shares pre-filled from position sizing — no prompt needed
+function addToHoldCheck(ticker, entryPrice, shares){
+  if(!shares || shares <= 0){ shares = 1; }
   if(openPositions.find(function(p){ return p.ticker===ticker; })){
     alert(ticker+" is already in your 3:30 Check list.");
     showTab("holdcheck");
@@ -1742,9 +1739,7 @@ function addToHoldCheck(ticker, entryPrice){
   });
   localStorage.setItem("openPositions", JSON.stringify(openPositions));
   renderOpenPositions();
-  // Switch to 3:30 Check tab so user can see it was added
   showTab("holdcheck");
-  // Show confirmation
   var confirmEl = document.getElementById("hs-results");
   if(confirmEl) confirmEl.innerHTML = '<div style="background:#00e5a011;border:1px solid #00e5a033;border-radius:8px;padding:12px;margin-bottom:10px;font-size:11px;color:#00e5a0">✅ Added '+ticker+' — '+shares+' shares @ $'+entryPrice+'. Run check at 3:30pm.</div>';
 }
