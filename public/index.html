@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="AI Scanner"/>
   <meta name="theme-color" content="#050508"/>
-  <title>Rahul Stock Scanner</title>
+  <title>AI Stock Scanner</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 
@@ -790,7 +790,7 @@
 
   <!-- HEADER -->
   <div class="hdr">
-    <h1>📡 Rahul Stock Scanner <span class="badge">$200/DAY TARGET</span></h1>
+    <h1>📡 AI Swing Scanner <span class="badge">$200/DAY TARGET</span></h1>
     <p id="hdr-sub">Loading...</p>
   </div>
 
@@ -825,20 +825,13 @@
 
   <!-- ═══ SCANNER TAB ═══ -->
   <div id="tab-scanner">
-    <div style="display:table;width:100%;border-spacing:6px;margin-bottom:8px;">
-      <div style="display:table-row;">
-        <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-dip" onclick="setMode('dip')" style="width:100%;background:var(--blue-dim);border:2px solid #2d6aff;border-radius:8px;padding:14px 4px;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">DIP &amp; BOUNCE</button>
-        </div>
-        <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-gap" onclick="setMode('gap')" style="width:100%;background:var(--surface);border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">GAP UP</button>
-        </div>
-        <div style="display:table-cell;width:33%;padding:3px;">
-          <button id="mode-both" onclick="setMode('both')" style="width:100%;background:var(--surface);border:1px solid #333;border-radius:8px;padding:14px 4px;color:#555;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;font-family:Courier New,monospace;">BOTH</button>
-        </div>
-      </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+      <button id="mode-dip" onclick="setMode('dip')" style="width:100%;background:var(--surface2);border:2px solid var(--neon-cyan);border-radius:var(--radius);padding:14px 4px;color:var(--neon-cyan);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;text-shadow:var(--glow-cyan);">📉 DIP &amp; BOUNCE</button>
+      <button id="mode-gap" onclick="setMode('gap')" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 4px;color:var(--text3);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;">📈 GAP UP</button>
+      <button id="mode-movers" onclick="setMode('movers')" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 4px;color:var(--text3);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;">⚡ MARKET MOVERS</button>
+      <button id="mode-all" onclick="setMode('all')" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 4px;color:var(--text3);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;">🔥 ALL</button>
     </div>
-    <div id="mode-hint" style="font-size:10px;color:var(--text3);margin-bottom:10px;text-align:center;letter-spacing:1px;">Dip and Bounce — use any time during market hours</div>
+    <div id="mode-hint" style="font-size:9px;color:var(--text3);margin-bottom:10px;text-align:center;letter-spacing:2px;font-family:'Share Tech Mono',monospace;">DIP AND BOUNCE — USE ANY TIME DURING MARKET HOURS</div>
     <button class="btn-scan" id="scan-btn" onclick="runScan()">SCAN NOW</button>
     <button class="btn-notif" id="notif-btn" onclick="toggleNotif()">ENABLE HOURLY REMINDER</button>
     <div class="status-bar" id="fetch-status" style="display:none"></div>
@@ -1234,18 +1227,83 @@ function setMode(mode){
   var gapBtn  = document.getElementById("mode-gap");
   var bothBtn = document.getElementById("mode-both");
   if(!dipBtn || !gapBtn || !bothBtn) return;
-  dipBtn.style.background="#ffffff"; dipBtn.style.border="1px solid #d8dce8"; dipBtn.style.color="#4a5568";
-  gapBtn.style.background="#ffffff"; gapBtn.style.border="1px solid #d8dce8"; gapBtn.style.color="#4a5568";
-  bothBtn.style.background="#ffffff"; bothBtn.style.border="1px solid #d8dce8"; bothBtn.style.color="#4a5568";
-  if(mode==="dip"){  dipBtn.style.background="#eef2ff";  dipBtn.style.border="2px solid #2d6aff";  dipBtn.style.color="#2d6aff"; }
-  if(mode==="gap"){  gapBtn.style.background="#faf5ff";  gapBtn.style.border="2px solid #a855f7";  gapBtn.style.color="#c084fc"; }
-  if(mode==="both"){ bothBtn.style.background="#f0fff8"; bothBtn.style.border="2px solid #00966a"; bothBtn.style.color="#00966a"; }
+  var dipBtn   = document.getElementById("mode-dip");
+  var gapBtn   = document.getElementById("mode-gap");
+  var moversBtn= document.getElementById("mode-movers");
+  var allBtn   = document.getElementById("mode-all");
+
+  // Reset all buttons
+  [dipBtn,gapBtn,moversBtn,allBtn].forEach(function(b){
+    if(!b) return;
+    b.style.background="var(--surface)";
+    b.style.border="1px solid var(--border)";
+    b.style.color="var(--text3)";
+    b.style.boxShadow="none";
+    b.style.textShadow="none";
+  });
+
+  // Activate selected
+  if(mode==="dip" && dipBtn){
+    dipBtn.style.background="var(--surface2)"; dipBtn.style.border="2px solid var(--neon-cyan)";
+    dipBtn.style.color="var(--neon-cyan)"; dipBtn.style.textShadow="var(--glow-cyan)";
+  }
+  if(mode==="gap" && gapBtn){
+    gapBtn.style.background="var(--surface2)"; gapBtn.style.border="2px solid var(--neon-pink)";
+    gapBtn.style.color="var(--neon-pink)"; gapBtn.style.textShadow="var(--glow-pink)";
+  }
+  if(mode==="movers" && moversBtn){
+    moversBtn.style.background="var(--surface2)"; moversBtn.style.border="2px solid var(--neon-amber)";
+    moversBtn.style.color="var(--neon-amber)"; moversBtn.style.textShadow="var(--glow-amber)";
+  }
+  if(mode==="all" && allBtn){
+    allBtn.style.background="var(--surface2)"; allBtn.style.border="2px solid var(--neon-green)";
+    allBtn.style.color="var(--neon-green)"; allBtn.style.textShadow="var(--glow-green)";
+  }
+
   var hintEl = document.getElementById("mode-hint");
-  if(hintEl) hintEl.textContent = mode==="gap"?"Gap Up - best at 9:31am open":mode==="both"?"Both strategies - full picture":"Dip and Bounce - use any time";
+  var hints = {
+    dip:    "DIP AND BOUNCE — USE ANY TIME DURING MARKET HOURS",
+    gap:    "GAP UP — BEST AT 9:31AM OPEN",
+    movers: "MARKET MOVERS — TOP 20 GAINERS + LOSERS FROM ENTIRE MARKET",
+    all:    "ALL — RUNS DIP + GAP UP + MARKET MOVERS SIMULTANEOUSLY"
+  };
+  if(hintEl) hintEl.textContent = hints[mode] || hints.dip;
+
   var scanBtn = document.getElementById("scan-btn");
-  if(scanBtn) scanBtn.style.background = mode==="gap"?"linear-gradient(135deg,#7c3aed,#5b21b6)":mode==="both"?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#2d6aff,#1a45cc)";
+  var scanColors = {
+    dip:    "transparent",
+    gap:    "transparent",
+    movers: "transparent",
+    all:    "transparent"
+  };
+  var scanBorders = {
+    dip:    "2px solid var(--neon-cyan)",
+    gap:    "2px solid var(--neon-pink)",
+    movers: "2px solid var(--neon-amber)",
+    all:    "2px solid var(--neon-green)"
+  };
+  var scanTextColors = {
+    dip:    "var(--neon-cyan)",
+    gap:    "var(--neon-pink)",
+    movers: "var(--neon-amber)",
+    all:    "var(--neon-green)"
+  };
+  if(scanBtn){
+    scanBtn.style.background = scanColors[mode]||scanColors.dip;
+    scanBtn.style.border     = scanBorders[mode]||scanBorders.dip;
+    scanBtn.style.color      = scanTextColors[mode]||scanTextColors.dip;
+    scanBtn.style.textShadow = mode==="dip"?"var(--glow-cyan)":mode==="gap"?"var(--glow-pink)":mode==="movers"?"var(--glow-amber)":"var(--glow-green)";
+    scanBtn.style.boxShadow  = mode==="dip"?"var(--glow-cyan)":mode==="gap"?"var(--glow-pink)":mode==="movers"?"var(--glow-amber)":"var(--glow-green)";
+  }
+
   var sc = document.getElementById("scanner-content");
-  if(sc) sc.innerHTML = '<div class="idle"><div class="icon">&#128269;</div><p>Mode: <strong>'+mode.toUpperCase()+'</strong><br><br>'+(mode==="gap"?"Best used at 9:31am market open":mode==="both"?"Runs both Dip and Gap Up scanners":"Use any time during market hours")+'<br><br>Press SCAN NOW to start.</p></div>';
+  var modeDesc = {
+    dip:    "DIP AND BOUNCE\n\nScans 120 stocks for dips below yesterday close.\nBest any time during market hours.",
+    gap:    "GAP UP\n\nScans 120 stocks for stocks gapping up.\nBest at 9:31am market open.",
+    movers: "MARKET MOVERS\n\nFetches top 20 gainers and top 20 losers\nfrom the ENTIRE US stock market via Polygon.\nCatches stocks outside your 120 watchlist.",
+    all:    "ALL SCANNERS\n\nRuns Dip + Gap Up + Market Movers\nsimultaneously. Full picture of the market."
+  };
+  if(sc) sc.innerHTML = '<div class="idle"><div class="icon">⚡</div><p>'+modeDesc[mode].replace(/\n/g,"<br>")+'<br><br>PRESS SCAN NOW TO START.</p></div>';
 }
 
 //
@@ -1304,8 +1362,8 @@ async function runScan(){
   const btn=document.getElementById("scan-btn");
   btn.disabled=true; btn.textContent=" SCANNING...";
   showStatus("","");
-  const spinColor = scanMode==="gap"?"#a855f7":scanMode==="both"?"#00e5a0":"#2d6aff";
-  const modeLabel = scanMode==="gap"?"GAP UP SCANNER":scanMode==="both"?"DIP + GAP SCANNER":"DIP & BOUNCE SCANNER";
+  const spinColor = scanMode==="gap"?"var(--neon-pink)":scanMode==="movers"?"var(--neon-amber)":scanMode==="all"?"var(--neon-green)":"var(--neon-cyan)";
+  const modeLabel = scanMode==="gap"?"GAP UP SCANNER":scanMode==="movers"?"MARKET MOVERS SCANNER":scanMode==="all"?"ALL SCANNERS":"DIP & BOUNCE SCANNER";
   document.getElementById("scanner-content").innerHTML =
     '<div class="loading">' +
     '<div class="spinner" style="border-top-color:' + spinColor + '"></div>' +
@@ -1628,22 +1686,22 @@ async function runScan(){
 
   } // end if(scanMode !== gap)
 
-  // BRANCH BY MODE 
+  // BRANCH BY MODE
   const container = document.getElementById("scanner-content");
   container.innerHTML = "";
 
-  if(scanMode === "dip" || scanMode === "both"){
+  if(scanMode === "dip" || scanMode === "all"){
     if(result.trades) result.trades = result.trades.filter(function(t){ return !(t.newsFlag||"").startsWith("SKIP"); });
     currentTrades = result.trades||[];
     try {
       renderResult(result, data);
     } catch(renderErr) {
       console.error("[Render] Dip error:", renderErr);
-      container.innerHTML += '<div style="background:var(--surface);border:1px solid #f4c43033;border-radius:8px;padding:14px;margin-bottom:12px;"><div style="color:#f4c430;font-size:11px;margin-bottom:8px"> Display issue - Claude returned: ' + (result.verdict||"unknown") + '</div><div style="color:var(--text2);font-size:11px">' + (result.summary||"") + '</div><button class="btn-sm" style="margin-top:10px" onclick="runScan()"> TRY AGAIN</button></div>';
+      container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--neon-amber)33;border-radius:var(--radius);padding:14px;margin-bottom:12px;"><div style="color:var(--neon-amber);font-size:11px;margin-bottom:8px">⚠ Display issue - Claude returned: ' + (result.verdict||"unknown") + '</div><div style="color:var(--text2);font-size:11px">' + (result.summary||"") + '</div><button class="btn-sm" style="margin-top:10px" onclick="runScan()">↺ TRY AGAIN</button></div>';
     }
   }
 
-  if(scanMode === "gap" || scanMode === "both"){
+  if(scanMode === "gap" || scanMode === "all"){
     showStatus("Running Gap Up analysis...", "");
     try {
       const gapResult = await runGapAnalysis(data);
@@ -1651,19 +1709,118 @@ async function runScan(){
       showStatus("Gap Up analysis complete", "ok");
     } catch(gapErr) {
       console.error("[Gap] Error:", gapErr);
-      container.innerHTML += '<div style="background:var(--purple-dim);border:1px solid #a855f733;border-radius:8px;padding:14px;"><div style="color:var(--purple);font-size:11px"> Gap Up scanner error: ' + gapErr.message + '</div></div>';
+      container.innerHTML += '<div style="background:var(--purple-dim);border:1px solid var(--neon-pink)33;border-radius:var(--radius);padding:14px;"><div style="color:var(--neon-pink);font-size:11px">⚠ Gap Up scanner error: ' + gapErr.message + '</div></div>';
+    }
+  }
+
+  if(scanMode === "movers" || scanMode === "all"){
+    showStatus("Fetching market-wide movers from Polygon...", "");
+    try {
+      const moversResult = await runMarketMovers(container);
+      showStatus("Market Movers scan complete", "ok");
+    } catch(mErr) {
+      console.error("[Movers] Error:", mErr);
+      container.innerHTML += '<div style="background:var(--amber-dim);border:1px solid var(--neon-amber)33;border-radius:var(--radius);padding:14px;"><div style="color:var(--neon-amber);font-size:11px">⚠ Market Movers error: ' + mErr.message + '</div></div>';
     }
   }
 
   scanning=false;
   btn.disabled=false;
-  const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", both:"SCAN BOTH"};
-  btn.textContent = btnLabels[scanMode]||" SCAN NOW";
+  const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", movers:"SCAN MOVERS", all:"SCAN ALL"};
+  btn.textContent = btnLabels[scanMode]||"SCAN NOW";
 }
 
 //
-// GAP UP ANALYSIS
+// MARKET MOVERS — Top 20 Gainers + Top 20 Losers from entire US market
 //
+async function runMarketMovers(container) {
+  if(!proxyUrl) throw new Error("No proxy URL configured");
+
+  // Fetch gainers and losers in parallel from Polygon
+  const [gainersResp, losersResp] = await Promise.all([
+    fetch(proxyUrl + "/api/marketmovers?direction=gainers"),
+    fetch(proxyUrl + "/api/marketmovers?direction=losers")
+  ]);
+  const gainersJson = await gainersResp.json();
+  const losersJson  = await losersResp.json();
+
+  const gainers = gainersJson.tickers || [];
+  const losers  = losersJson.tickers  || [];
+
+  // Build display HTML
+  var html = '<div style="margin-bottom:16px;">';
+  html += '<div style="font-size:10px;color:var(--neon-amber);letter-spacing:3px;margin-bottom:12px;font-family:Share Tech Mono,monospace;text-shadow:var(--glow-amber);">⚡ MARKET MOVERS — ENTIRE US MARKET</div>';
+
+  // GAINERS section
+  html += '<div style="font-size:9px;color:var(--neon-green);letter-spacing:3px;margin-bottom:8px;font-family:Share Tech Mono,monospace;text-shadow:var(--glow-green);">▲ TOP GAINERS TODAY</div>';
+  if(gainers.length === 0){
+    html += '<div style="color:var(--text3);font-size:10px;padding:12px;font-family:Share Tech Mono,monospace;">No gainers data available</div>';
+  } else {
+    gainers.forEach(function(t, i){
+      var chgPct = t.todaysChangePerc ? t.todaysChangePerc.toFixed(2) : "N/A";
+      var chgDol = t.todaysChange     ? t.todaysChange.toFixed(2)     : "N/A";
+      var price  = t.day?.c || t.lastTrade?.p || "--";
+      var vol    = t.day?.v ? (t.day.v/1e6).toFixed(1)+"M" : "--";
+      var inWatch= watchlist.includes(t.ticker);
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--neon-green)22;border-left:2px solid var(--neon-green);border-radius:var(--radius);margin-bottom:6px;">';
+      html += '<div style="font-size:11px;font-weight:700;color:var(--neon-green);font-family:Share Tech Mono,monospace;width:52px;text-shadow:var(--glow-green)">'+t.ticker+'</div>';
+      html += '<div style="flex:1;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;">';
+      html += '<span style="font-size:13px;font-weight:700;color:var(--text);font-family:Share Tech Mono,monospace">$'+price+'</span>';
+      html += '<span style="font-size:11px;color:var(--neon-green);font-family:Share Tech Mono,monospace;text-shadow:var(--glow-green)">+'+chgPct+'%</span>';
+      html += '<span style="font-size:10px;color:var(--text3);font-family:Share Tech Mono,monospace">(+$'+chgDol+')</span>';
+      if(inWatch) html += '<span style="font-size:8px;color:var(--neon-amber);border:1px solid var(--neon-amber)44;padding:1px 6px;border-radius:2px;font-family:Share Tech Mono,monospace">IN LIST</span>';
+      html += '</div>';
+      html += '<div style="font-size:9px;color:var(--text3);font-family:Share Tech Mono,monospace;margin-top:2px">Vol: '+vol+'</div>';
+      html += '</div>';
+      if(!inWatch){
+        html += '<button onclick="addToWatchlistFromMovers(\''+t.ticker+'\')" style="background:transparent;border:1px solid var(--neon-green)44;border-radius:var(--radius);padding:4px 8px;color:var(--neon-green);font-size:8px;cursor:pointer;font-family:Share Tech Mono,monospace;white-space:nowrap;letter-spacing:1px">+ ADD</button>';
+      }
+      html += '</div>';
+    });
+  }
+
+  // LOSERS section
+  html += '<div style="font-size:9px;color:var(--neon-pink);letter-spacing:3px;margin:16px 0 8px;font-family:Share Tech Mono,monospace;text-shadow:var(--glow-pink);">▼ TOP LOSERS TODAY</div>';
+  if(losers.length === 0){
+    html += '<div style="color:var(--text3);font-size:10px;padding:12px;font-family:Share Tech Mono,monospace;">No losers data available</div>';
+  } else {
+    losers.forEach(function(t, i){
+      var chgPct = t.todaysChangePerc ? t.todaysChangePerc.toFixed(2) : "N/A";
+      var chgDol = t.todaysChange     ? t.todaysChange.toFixed(2)     : "N/A";
+      var price  = t.day?.c || t.lastTrade?.p || "--";
+      var vol    = t.day?.v ? (t.day.v/1e6).toFixed(1)+"M" : "--";
+      var inWatch= watchlist.includes(t.ticker);
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--neon-pink)22;border-left:2px solid var(--neon-pink);border-radius:var(--radius);margin-bottom:6px;">';
+      html += '<div style="font-size:11px;font-weight:700;color:var(--neon-pink);font-family:Share Tech Mono,monospace;width:52px;text-shadow:var(--glow-pink)">'+t.ticker+'</div>';
+      html += '<div style="flex:1;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;">';
+      html += '<span style="font-size:13px;font-weight:700;color:var(--text);font-family:Share Tech Mono,monospace">$'+price+'</span>';
+      html += '<span style="font-size:11px;color:var(--neon-pink);font-family:Share Tech Mono,monospace;text-shadow:var(--glow-pink)">'+chgPct+'%</span>';
+      html += '<span style="font-size:10px;color:var(--text3);font-family:Share Tech Mono,monospace">($'+chgDol+')</span>';
+      if(inWatch) html += '<span style="font-size:8px;color:var(--neon-amber);border:1px solid var(--neon-amber)44;padding:1px 6px;border-radius:2px;font-family:Share Tech Mono,monospace">IN LIST</span>';
+      html += '</div>';
+      html += '<div style="font-size:9px;color:var(--text3);font-family:Share Tech Mono,monospace;margin-top:2px">Vol: '+vol+'</div>';
+      html += '</div>';
+      if(!inWatch){
+        html += '<button onclick="addToWatchlistFromMovers(\''+t.ticker+'\')" style="background:transparent;border:1px solid var(--neon-pink)44;border-radius:var(--radius);padding:4px 8px;color:var(--neon-pink);font-size:8px;cursor:pointer;font-family:Share Tech Mono,monospace;white-space:nowrap;letter-spacing:1px">+ ADD</button>';
+      }
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+  container.innerHTML += html;
+}
+
+// Add a market mover ticker to watchlist with one tap
+function addToWatchlistFromMovers(ticker){
+  if(watchlist.includes(ticker)){ return; }
+  watchlist.push(ticker);
+  localStorage.setItem("watchlist", JSON.stringify(watchlist));
+  // Show brief confirmation
+  var btn = event.target;
+  if(btn){ btn.textContent="✓ ADDED"; btn.style.color="var(--neon-green)"; btn.style.borderColor="var(--neon-green)44"; btn.disabled=true; }
+}
 async function runGapAnalysis(data) {
   var now      = new Date();
   var hour     = now.getHours();
