@@ -1225,8 +1225,8 @@ function setMode(mode){
   localStorage.setItem("scanMode", mode);
   var dipBtn  = document.getElementById("mode-dip");
   var gapBtn  = document.getElementById("mode-gap");
-  var bothBtn = document.getElementById("mode-both");
-  if(!dipBtn || !gapBtn || !bothBtn) return;
+  var bothBtn = null; // legacy - no longer used
+  if(!dipBtn || !gapBtn) return;
   var dipBtn   = document.getElementById("mode-dip");
   var gapBtn   = document.getElementById("mode-gap");
   var moversBtn= document.getElementById("mode-movers");
