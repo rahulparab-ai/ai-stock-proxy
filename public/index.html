@@ -1987,7 +1987,7 @@ async function runMarketMovers(container) {
           var flag = String(t.newsFlag||"");
           return !flag.startsWith("SKIP");
         });
-        renderResult(dipResult, moversData, true); // appendMode=true — don't wipe existing results
+        renderResult(dipResult, moversData, true, true); // appendMode=true, noTransparency=true
       } else {
         container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--neon-pink)22;border-radius:var(--radius);padding:14px;margin-bottom:12px;font-size:11px;color:var(--text3);font-family:Share Tech Mono,monospace;">'+
           (dipResult.summary||"No high-conviction dip setups in market-wide losers today.")+'</div>';
@@ -2390,7 +2390,7 @@ function prefillJournal(ticker, entry, target){
 //
 // RENDER RESULT
 //
-function renderResult(result, data, appendMode){
+function renderResult(result, data, appendMode, noTransparency){
   var now      = new Date().toLocaleTimeString();
   var pnlLeft  = Math.max(0, dailyGoal - todayPnL());
   var allTrades    = result.trades||[];
@@ -2525,9 +2525,9 @@ function renderResult(result, data, appendMode){
     html += '</div>';
   }
 
-  // SCAN TRANSPARENCY
+  // SCAN TRANSPARENCY — skip for market movers sub-scans
   var report = window._lastExclusionReport||[];
-  if(report.length>0){
+  if(report.length>0 && !noTransparency){
     html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">';
     html += '<div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:10px">SCAN TRANSPARENCY — ' + report.length + ' STOCKS</div>';
     report.forEach(function(s){
