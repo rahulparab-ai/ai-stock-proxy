@@ -130,8 +130,25 @@ export default async function handler(req, res) {
     const gainers = gainersJson.tickers || [];
     const losers  = losersJson.tickers  || [];
 
-    // ── STEP 2: Combine unique tickers for RSI/ATR fetch ─────────
-    const allSnaps = [...gainers, ...losers];
+    // ── STEP 2: Filter to real tradeable stocks only ──────────────
+    // Remove penny stocks, warrants, SPACs, rights that pollute the list
+    function isRealStock(snap) {
+      const t = snap.ticker || "";
+      const price = snap.day?.c || snap.lastTrade?.p || 0;
+      const vol   = snap.day?.v || 0;
+      if (price < 5)       return false; // no penny stocks
+      if (vol < 200000)    return false; // no illiquid stocks
+      if (t.endsWith("W")) return false; // warrants
+      if (t.endsWith("R")) return false; // rights
+      if (t.endsWith("Z")) return false; // bankruptcy
+      if (t.includes(".")) return false; // VLN.WS etc
+      if (t.length > 5)    return false; // too long = special security
+      return true;
+    }
+
+    const filteredGainers = gainers.filter(isRealStock);
+    const filteredLosers  = losers.filter(isRealStock);
+    const allSnaps = [...filteredGainers, ...filteredLosers];
     const seen = new Set();
     const uniqueSnaps = allSnaps.filter(t => {
       if (seen.has(t.ticker)) return false;
@@ -173,8 +190,8 @@ export default async function handler(req, res) {
     });
 
     // ── STEP 4: Build enriched stock objects ──────────────────────
-    const gainerStocks = gainers.map(s => buildStockObj(s, rsiMap, atrMap, marketOpen));
-    const loserStocks  = losers.map(s  => buildStockObj(s, rsiMap, atrMap, marketOpen));
+    const gainerStocks = filteredGainers.map(s => buildStockObj(s, rsiMap, atrMap, marketOpen));
+    const loserStocks  = filteredLosers.map(s  => buildStockObj(s, rsiMap, atrMap, marketOpen));
 
     const result = {
       gainers:     gainerStocks,
