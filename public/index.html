@@ -1691,7 +1691,7 @@ async function runScan(){
   container.innerHTML = "";
 
   if(scanMode === "dip" || scanMode === "all"){
-    if(result.trades) result.trades = result.trades.filter(function(t){ return !(t.newsFlag||"").startsWith("SKIP"); });
+    if(result.trades) result.trades = result.trades.filter(function(t){ return !String(t.newsFlag||"").startsWith("SKIP"); });
     currentTrades = result.trades||[];
     try {
       renderResult(result, data);
@@ -1807,7 +1807,10 @@ async function runMarketMovers(container) {
       container.innerHTML += '<div style="font-size:9px;color:var(--neon-pink);letter-spacing:3px;margin:16px 0 8px;font-family:Share Tech Mono,monospace;text-shadow:var(--glow-pink);">▼ MARKET-WIDE DIP SETUPS</div>';
 
       if(dipResult.trades && dipResult.trades.length>0){
-        dipResult.trades = dipResult.trades.filter(function(t){ return !(t.newsFlag||"").startsWith("SKIP"); });
+        dipResult.trades = dipResult.trades.filter(function(t){
+          var flag = String(t.newsFlag||"");
+          return !flag.startsWith("SKIP");
+        });
         renderResult(dipResult, moversData);
       } else {
         container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--neon-pink)22;border-radius:var(--radius);padding:14px;margin-bottom:12px;font-size:11px;color:var(--text3);font-family:Share Tech Mono,monospace;">'+
@@ -2215,7 +2218,7 @@ function renderResult(result,data){
   var now      = new Date().toLocaleTimeString();
   var pnlLeft  = Math.max(0, dailyGoal - todayPnL());
   var allTrades    = result.trades||[];
-  var buyTrades    = allTrades.filter(function(t){ return t.tier==="BUY"      && !(t.newsFlag||"").startsWith("SKIP"); });
+  var buyTrades    = allTrades.filter(function(t){ return t.tier==="BUY"      && !String(t.newsFlag||"").startsWith("SKIP"); });
   var watchTrades  = allTrades.filter(function(t){ return t.tier==="WATCHING"; });
   var hasBuys      = buyTrades.length > 0;
 
