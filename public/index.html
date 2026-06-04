@@ -899,6 +899,7 @@
   </div>
 
   <!-- ═══ WATCHLIST TAB ═══ -->
+  <div id="tab-watchlist" style="display:none">
     <div class="add-row">
       <input class="add-input" id="new-ticker" placeholder="Add ticker e.g. TSLA" maxlength="6"
         onkeydown="if(event.key==='Enter')addTicker()"/>
@@ -1569,6 +1570,7 @@ async function runScan(){
         atr:          s.atr,
         sentToClaude: !!inCombined,
         buyReasons:   inCombined ? [] : reasons,
+        volNull:      s.volNull,
       };
     })
     .sort((a,b) => (a.dipPct||0) - (b.dipPct||0)); // most negative dip first
@@ -1764,10 +1766,12 @@ function logScanToHistory(mode, result, gapResult, stockCount){
   var etNow  = new Date(now.toLocaleString("en-US",{timeZone:"America/New_York"}));
   var timeStr= etNow.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true});
   var todayKey = etNow.toISOString().split("T")[0];
+
+  // Capture signals found
   var signals = [];
   if(result && result.trades){
     result.trades.filter(function(t){ return t.tier==="BUY"; }).forEach(function(t){
-      signals.push({ticker:t.ticker, type:"DIP BUY", price:t.entryPrice, target:t.targetPrice, score:t.score});
+      signals.push({ticker:t.ticker, type:"DIP BUY", price:t.entryPrice, target:t.targetPrice, score:t.score, holdType:t.holdType});
     });
     result.trades.filter(function(t){ return t.tier==="WATCHING"; }).forEach(function(t){
       signals.push({ticker:t.ticker, type:"WATCHING", price:t.entryPrice, trigger:t.triggerPrice});
@@ -1778,12 +1782,38 @@ function logScanToHistory(mode, result, gapResult, stockCount){
       signals.push({ticker:s.ticker, type:"GAP UP", price:s.entryPrice, target:s.targetPrice, conf:s.confidence});
     });
   }
-  var entry = {time:timeStr, mode:mode, stockCount:stockCount||0, signals:signals,
-    verdict:result?(result.verdict||""):"", summary:result?(result.summary||""):"", ts:now.getTime()};
+
+  // Capture FULL scan transparency — every stock with price, dip, RSI, vol, baseline delta
+  var transparency = (window._lastExclusionReport||[]).map(function(s){
+    return {
+      ticker:      s.ticker,
+      curr:        s.curr,
+      dipPct:      s.dipPct,
+      rsi:         s.rsi,
+      volRatio:    s.volRatio,
+      volNull:     s.volNull,
+      priceSource: s.priceSource,
+      sentToClaude:s.sentToClaude,
+      buyReasons:  s.buyReasons,
+      atr:         s.atr,
+    };
+  });
+
+  var entry = {
+    time:         timeStr,
+    mode:         mode,
+    stockCount:   stockCount||0,
+    signals:      signals,
+    transparency: transparency,
+    verdict:      result?(result.verdict||""):"",
+    summary:      result?(result.summary||""):"",
+    ts:           now.getTime()
+  };
+
   var key = "scanHistory_"+todayKey;
   var history = JSON.parse(localStorage.getItem(key)||"[]");
   history.unshift(entry);
-  history = history.slice(0,20);
+  history = history.slice(0,15); // keep last 15 scans
   localStorage.setItem(key, JSON.stringify(history));
   renderScanHistory();
 }
@@ -1794,39 +1824,83 @@ function renderScanHistory(){
   var todayKey = new Date().toISOString().split("T")[0];
   var history  = JSON.parse(localStorage.getItem("scanHistory_"+todayKey)||"[]");
   if(history.length===0){
-    el.innerHTML='<div class="idle" style="padding:30px 20px;"><div class="icon">📋</div><p>NO SCANS YET TODAY<br><br>EACH SCAN WILL BE LOGGED HERE WITH TIME AND RESULTS</p></div>';
+    el.innerHTML='<div class="idle" style="padding:30px 20px;"><div class="icon">📋</div><p>NO SCANS YET TODAY<br><br>RUN A SCAN TO LOG IT HERE<br>EACH ENTRY EXPANDS TO SHOW<br>FULL SCAN TRANSPARENCY</p></div>';
     return;
   }
   var html="";
-  history.forEach(function(entry){
+  history.forEach(function(entry, idx){
     var modeColor=entry.mode==="gap"?"var(--neon-pink)":entry.mode==="movers"?"var(--neon-amber)":entry.mode==="all"?"var(--neon-green)":"var(--neon-cyan)";
     var hasBuys=entry.signals.filter(function(s){return s.type==="DIP BUY"||s.type==="GAP UP";}).length;
     var borderCol=hasBuys>0?"var(--neon-green)":"var(--border)";
-    html+='<div style="background:var(--surface);border:1px solid '+borderCol+'22;border-left:2px solid '+borderCol+';border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
-    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
-    html+='<span style="font-size:11px;font-weight:700;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;">'+entry.time+'</span>';
+    var entryId="hist-"+idx;
+
+    // Header row — always visible, tap to expand
+    html+='<div style="background:var(--surface);border:1px solid '+borderCol+'22;border-left:2px solid '+borderCol+';border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
+    html+='<div onclick="toggleHistEntry(\''+entryId+'\')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;">';
+    html+='<span style="font-size:11px;font-weight:700;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;min-width:70px;">'+entry.time+'</span>';
     html+='<span style="font-size:8px;color:'+modeColor+';border:1px solid '+modeColor+'44;padding:1px 6px;border-radius:2px;font-family:\'Share Tech Mono\',monospace;">'+entry.mode.toUpperCase()+'</span>';
     html+='<span style="font-size:8px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">'+entry.stockCount+' STOCKS</span>';
-    if(hasBuys>0) html+='<span style="font-size:8px;color:var(--neon-green);font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-green);">'+hasBuys+' SIGNAL'+(hasBuys>1?"S":"")+'</span>';
+    if(hasBuys>0) html+='<span style="font-size:9px;color:var(--neon-green);font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-green);margin-left:auto;">'+hasBuys+' BUY'+( hasBuys>1?"S":"")+'</span>';
+    else          html+='<span style="font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;margin-left:auto;">NO SIGNALS</span>';
+    html+='<span style="font-size:10px;color:var(--text3);margin-left:4px;">▼</span>';
     html+='</div>';
+
+    // Expandable body — signals + full transparency
+    html+='<div id="'+entryId+'" style="display:none;border-top:1px solid var(--border);padding:10px 14px;">';
+
+    // Signals found
     if(entry.signals.length>0){
+      html+='<div style="font-size:8px;color:var(--neon-cyan);letter-spacing:2px;margin-bottom:6px;font-family:\'Share Tech Mono\',monospace;">SIGNALS FOUND</div>';
       entry.signals.forEach(function(s){
         var sColor=(s.type==="DIP BUY"||s.type==="GAP UP")?"var(--neon-green)":"var(--neon-amber)";
-        html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);">';
-        html+='<span style="font-size:11px;font-weight:700;color:'+sColor+';font-family:\'Share Tech Mono\',monospace;width:56px;">'+s.ticker+'</span>';
-        html+='<span style="font-size:8px;color:'+sColor+';font-family:\'Share Tech Mono\',monospace;width:60px;">'+s.type+'</span>';
-        html+='<span style="font-size:10px;color:var(--text);font-family:\'Share Tech Mono\',monospace;">$'+s.price+'</span>';
-        if(s.target) html+=' <span style="font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">→$'+s.target+'</span>';
-        if(s.score)  html+=' <span style="font-size:8px;color:var(--text3);">'+s.score+'pts</span>';
-        if(s.conf)   html+=' <span style="font-size:8px;color:var(--text3);">'+s.conf+'%</span>';
+        html+='<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-family:\'Share Tech Mono\',monospace;">';
+        html+='<span style="font-size:11px;font-weight:700;color:'+sColor+';width:52px;">'+s.ticker+'</span>';
+        html+='<span style="font-size:8px;color:'+sColor+';width:60px;">'+s.type+'</span>';
+        html+='<span style="font-size:10px;color:var(--text);">$'+s.price+'</span>';
+        if(s.target) html+='<span style="font-size:9px;color:var(--text3);"> → $'+s.target+'</span>';
+        if(s.score)  html+='<span style="font-size:8px;color:var(--text3);"> '+s.score+'pts</span>';
+        if(s.holdType) html+='<span style="font-size:8px;color:'+(s.holdType==="OVERNIGHT"?"var(--neon-purple)":"var(--neon-cyan)")+';"> '+s.holdType+'</span>';
+        html+='</div>';
+      });
+      html+='<div style="height:1px;background:var(--border);margin:8px 0;"></div>';
+    }
+
+    // Full scan transparency
+    if(entry.transparency && entry.transparency.length>0){
+      html+='<div style="font-size:8px;color:var(--neon-cyan);letter-spacing:2px;margin-bottom:6px;font-family:\'Share Tech Mono\',monospace;">SCAN TRANSPARENCY — '+entry.transparency.length+' STOCKS</div>';
+      entry.transparency.forEach(function(s){
+        var sentColor=s.sentToClaude?"var(--neon-green)":"var(--text3)";
+        var dipColor=(s.dipPct||0)<-1.5?"var(--neon-green)":(s.dipPct||0)<0?"var(--neon-amber)":"var(--text3)";
+        html+='<div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)22;font-family:\'Share Tech Mono\',monospace;">';
+        html+='<span style="font-size:10px;font-weight:700;color:var(--text);width:48px;flex-shrink:0;">'+s.ticker+'</span>';
+        html+='<div style="flex:1;font-size:9px;">';
+        html+='<span style="color:var(--neon-amber);">$'+( s.curr||"--")+'</span> ';
+        html+='<span style="color:'+sentColor+';">'+(s.sentToClaude?"SENT":"SKIP")+'</span> ';
+        html+='<span style="color:'+dipColor+';">'+(s.dipPct||0)+'%</span> ';
+        html+='RSI:<span style="color:'+((s.rsi||99)<=65?"var(--neon-green)":"var(--neon-pink)")+';">'+(s.rsi||"--")+'</span> ';
+        html+='Vol:<span style="color:'+(s.volNull?"var(--neon-amber)":(s.volRatio||0)>=0.8?"var(--neon-green)":"var(--neon-pink)")+';">'+(s.volNull?"early":(s.volRatio||"--")+"x")+'</span>';
+        if(s.buyReasons && s.buyReasons.length>0) html+='<div style="color:var(--text3);font-size:8px;">↳ '+s.buyReasons[0]+'</div>';
+        html+='</div>';
         html+='</div>';
       });
     } else {
-      html+='<div style="font-size:10px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">'+(entry.summary||"No signals found")+'</div>';
+      html+='<div style="font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">'+(entry.summary||"No data captured")+'</div>';
     }
-    html+='</div>';
+
+    html+='</div>'; // end expandable body
+    html+='</div>'; // end entry card
   });
   el.innerHTML=html;
+}
+
+function toggleHistEntry(id){
+  var el=document.getElementById(id);
+  if(!el) return;
+  var isOpen=el.style.display!=="none";
+  el.style.display=isOpen?"none":"block";
+  // Rotate arrow
+  var arrow=el.previousElementSibling?el.previousElementSibling.querySelector("span:last-child"):null;
+  if(arrow) arrow.textContent=isOpen?"▼":"▲";
 }
 
 function clearScanHistory(){
