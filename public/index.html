@@ -818,6 +818,7 @@
   <div class="tabs">
     <button class="tab active" onclick="showTab('scanner')">Scanner</button>
     <button class="tab" onclick="showTab('holdcheck')">3:30 Check</button>
+    <button class="tab" onclick="showTab('history')">History</button>
     <button class="tab" onclick="showTab('watchlist')">Watchlist</button>
     <button class="tab" onclick="showTab('journal')">Journal</button>
     <button class="tab" onclick="showTab('setup')">Setup</button>
@@ -883,7 +884,21 @@
   </div>
 
   <!-- ═══ WATCHLIST TAB ═══ -->
-  <div id="tab-watchlist" style="display:none">
+  <!-- ═══ SCAN HISTORY TAB ═══ -->
+  <div id="tab-history" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div style="font-size:9px;color:var(--neon-cyan);letter-spacing:3px;font-family:'Share Tech Mono',monospace;text-shadow:var(--glow-cyan);">⚡ SCAN HISTORY — TODAY</div>
+      <button onclick="clearScanHistory()" style="background:transparent;border:1px solid var(--neon-pink)44;border-radius:var(--radius);padding:5px 10px;color:var(--neon-pink);font-size:8px;cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:1px;">CLEAR</button>
+    </div>
+    <div id="scan-history-list">
+      <div class="idle" style="padding:30px 20px;">
+        <div class="icon">📋</div>
+        <p>NO SCANS YET TODAY<br><br>EACH SCAN WILL BE LOGGED HERE<br>WITH TIME AND RESULTS</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ WATCHLIST TAB ═══ -->
     <div class="add-row">
       <input class="add-input" id="new-ticker" placeholder="Add ticker e.g. TSLA" maxlength="6"
         onkeydown="if(event.key==='Enter')addTicker()"/>
@@ -1112,7 +1127,7 @@ window.onload = function(){
 // TABS
 //
 function showTab(name){
-  var allTabs = ["scanner","holdcheck","watchlist","journal","setup"];
+  var allTabs = ["scanner","holdcheck","history","watchlist","journal","setup"];
   allTabs.forEach(function(t){
     var el = document.getElementById("tab-"+t);
     if(el) el.style.display = (t===name?"block":"none");
@@ -1505,16 +1520,20 @@ async function runScan(){
   // Strong dip (3%+) bypasses RSI but still needs some volume (0.8x min — not dead)
   // Normal dip (1-3%) needs RSI < 55 AND volume >= 1.0x (at least normal activity)
   // Volume now real 30-day avg from Polygon — reliable data
+  // High-momentum AI/semiconductor stocks rarely hit RSI 45
+  // They bounce from RSI 60-70 — use relaxed threshold for these
+  const HIGH_MOMENTUM = ["NVDA","AMD","MRVL","ARM","PLTR","TSLA","AVGO","CRWD","ANET","NOW","SNOW","DDOG","COIN","GEV","VST","SMCI"];
+
   const mustCheck = movers.filter(function(s){
     var rawDip = s.dipPct||0;
     var dip    = Math.abs(rawDip);
     var vol    = s.volRatio;
-    if(rawDip >= 0) return false;           // ONLY stocks going DOWN
-    if(dip >= 3.0) return true;             // strong dip bypasses RSI AND volume (vol may be null at open)
-    // If volume is null (first few mins of market) — don't penalize, allow through
-    var volOk = (vol === null) || (vol >= 0.8);
-    if(!volOk) return false;
-    if(dip >= 1.5 && (!s.rsi || s.rsi <= 45)) return true;
+    var volOk  = s.volNull || vol===null || vol>=0.8;
+    if(rawDip >= 0) return false;
+    if(dip >= 3.0) return true; // Path A — bypasses RSI and volume
+    // High momentum stocks: RSI threshold is 65 not 45
+    var rsiThreshold = HIGH_MOMENTUM.includes(s.ticker) ? 65 : 45;
+    if(dip >= 1.5 && volOk && (!s.rsi || s.rsi <= rsiThreshold)) return true;
     return false;
   });
   const maybeWatch  = movers.filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
@@ -1580,6 +1599,7 @@ async function runScan(){
     "DIP SCANNER RULES:",
     "PATH A (Strong): dip >= 3% AND vol >= 0.8x — bypasses RSI check",
     "PATH B (Normal): dip >= 1.5% AND RSI <= 45 AND vol >= 0.8x",
+    "PATH B MOMENTUM (NVDA AMD MRVL ARM PLTR TSLA AVGO CRWD ANET NOW SNOW DDOG COIN): dip >= 1.5% AND RSI <= 65 — these stocks bounce from RSI 60-70, never reach RSI 45",
     "WATCHING: dip 0.8-1.5% with RSI 45-55 falling. Include exact triggerPrice.",
     "Stocks UP today belong in Gap Up scanner — skip them here.",
     "",
@@ -1691,10 +1711,11 @@ async function runScan(){
   container.innerHTML = "";
 
   if(scanMode === "dip" || scanMode === "all"){
+    if(scanMode === "all") container.innerHTML += '<div style="font-size:9px;color:var(--neon-cyan);letter-spacing:3px;margin:8px 0;font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-cyan);">📉 DIP &amp; BOUNCE SCANNER</div>';
     if(result.trades) result.trades = result.trades.filter(function(t){ return !String(t.newsFlag||"").startsWith("SKIP"); });
     currentTrades = result.trades||[];
     try {
-      renderResult(result, data);
+      renderResult(result, data, scanMode==="all"); // appendMode only in ALL mode
     } catch(renderErr) {
       console.error("[Render] Dip error:", renderErr);
       container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--neon-amber)33;border-radius:var(--radius);padding:14px;margin-bottom:12px;"><div style="color:var(--neon-amber);font-size:11px;margin-bottom:8px">⚠ Display issue - Claude returned: ' + (result.verdict||"unknown") + '</div><div style="color:var(--text2);font-size:11px">' + (result.summary||"") + '</div><button class="btn-sm" style="margin-top:10px" onclick="runScan()">↺ TRY AGAIN</button></div>';
@@ -1702,6 +1723,7 @@ async function runScan(){
   }
 
   if(scanMode === "gap" || scanMode === "all"){
+    if(scanMode === "all") container.innerHTML += '<div style="font-size:9px;color:var(--neon-pink);letter-spacing:3px;margin:16px 0 8px;font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-pink);">📈 GAP UP SCANNER</div>';
     showStatus("Running Gap Up analysis...", "");
     try {
       const gapResult = await runGapAnalysis(data);
@@ -1714,6 +1736,7 @@ async function runScan(){
   }
 
   if(scanMode === "movers" || scanMode === "all"){
+    if(scanMode === "all") container.innerHTML += '<div style="font-size:9px;color:var(--neon-amber);letter-spacing:3px;margin:16px 0 8px;font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-amber);">⚡ MARKET MOVERS</div>';
     showStatus("Fetching market-wide movers from Polygon...", "");
     try {
       const moversResult = await runMarketMovers(container);
@@ -1728,11 +1751,90 @@ async function runScan(){
   btn.disabled=false;
   const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", movers:"SCAN MOVERS", all:"SCAN ALL"};
   btn.textContent = btnLabels[scanMode]||"SCAN NOW";
+  // Log this scan to history
+  try { logScanToHistory(scanMode, result, null, Object.keys(data).length); } catch(e){}
 }
 
 //
 // MARKET MOVERS — Full Analysis (same logic as dip + gap scanners)
 //
+// ─── SCAN HISTORY ────────────────────────────────────────────────
+function logScanToHistory(mode, result, gapResult, stockCount){
+  var now    = new Date();
+  var etNow  = new Date(now.toLocaleString("en-US",{timeZone:"America/New_York"}));
+  var timeStr= etNow.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true});
+  var todayKey = etNow.toISOString().split("T")[0];
+  var signals = [];
+  if(result && result.trades){
+    result.trades.filter(function(t){ return t.tier==="BUY"; }).forEach(function(t){
+      signals.push({ticker:t.ticker, type:"DIP BUY", price:t.entryPrice, target:t.targetPrice, score:t.score});
+    });
+    result.trades.filter(function(t){ return t.tier==="WATCHING"; }).forEach(function(t){
+      signals.push({ticker:t.ticker, type:"WATCHING", price:t.entryPrice, trigger:t.triggerPrice});
+    });
+  }
+  if(gapResult && gapResult.setups){
+    gapResult.setups.forEach(function(s){
+      signals.push({ticker:s.ticker, type:"GAP UP", price:s.entryPrice, target:s.targetPrice, conf:s.confidence});
+    });
+  }
+  var entry = {time:timeStr, mode:mode, stockCount:stockCount||0, signals:signals,
+    verdict:result?(result.verdict||""):"", summary:result?(result.summary||""):"", ts:now.getTime()};
+  var key = "scanHistory_"+todayKey;
+  var history = JSON.parse(localStorage.getItem(key)||"[]");
+  history.unshift(entry);
+  history = history.slice(0,20);
+  localStorage.setItem(key, JSON.stringify(history));
+  renderScanHistory();
+}
+
+function renderScanHistory(){
+  var el = document.getElementById("scan-history-list");
+  if(!el) return;
+  var todayKey = new Date().toISOString().split("T")[0];
+  var history  = JSON.parse(localStorage.getItem("scanHistory_"+todayKey)||"[]");
+  if(history.length===0){
+    el.innerHTML='<div class="idle" style="padding:30px 20px;"><div class="icon">📋</div><p>NO SCANS YET TODAY<br><br>EACH SCAN WILL BE LOGGED HERE WITH TIME AND RESULTS</p></div>';
+    return;
+  }
+  var html="";
+  history.forEach(function(entry){
+    var modeColor=entry.mode==="gap"?"var(--neon-pink)":entry.mode==="movers"?"var(--neon-amber)":entry.mode==="all"?"var(--neon-green)":"var(--neon-cyan)";
+    var hasBuys=entry.signals.filter(function(s){return s.type==="DIP BUY"||s.type==="GAP UP";}).length;
+    var borderCol=hasBuys>0?"var(--neon-green)":"var(--border)";
+    html+='<div style="background:var(--surface);border:1px solid '+borderCol+'22;border-left:2px solid '+borderCol+';border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+    html+='<span style="font-size:11px;font-weight:700;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;">'+entry.time+'</span>';
+    html+='<span style="font-size:8px;color:'+modeColor+';border:1px solid '+modeColor+'44;padding:1px 6px;border-radius:2px;font-family:\'Share Tech Mono\',monospace;">'+entry.mode.toUpperCase()+'</span>';
+    html+='<span style="font-size:8px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">'+entry.stockCount+' STOCKS</span>';
+    if(hasBuys>0) html+='<span style="font-size:8px;color:var(--neon-green);font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-green);">'+hasBuys+' SIGNAL'+(hasBuys>1?"S":"")+'</span>';
+    html+='</div>';
+    if(entry.signals.length>0){
+      entry.signals.forEach(function(s){
+        var sColor=(s.type==="DIP BUY"||s.type==="GAP UP")?"var(--neon-green)":"var(--neon-amber)";
+        html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);">';
+        html+='<span style="font-size:11px;font-weight:700;color:'+sColor+';font-family:\'Share Tech Mono\',monospace;width:56px;">'+s.ticker+'</span>';
+        html+='<span style="font-size:8px;color:'+sColor+';font-family:\'Share Tech Mono\',monospace;width:60px;">'+s.type+'</span>';
+        html+='<span style="font-size:10px;color:var(--text);font-family:\'Share Tech Mono\',monospace;">$'+s.price+'</span>';
+        if(s.target) html+=' <span style="font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">→$'+s.target+'</span>';
+        if(s.score)  html+=' <span style="font-size:8px;color:var(--text3);">'+s.score+'pts</span>';
+        if(s.conf)   html+=' <span style="font-size:8px;color:var(--text3);">'+s.conf+'%</span>';
+        html+='</div>';
+      });
+    } else {
+      html+='<div style="font-size:10px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">'+(entry.summary||"No signals found")+'</div>';
+    }
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+
+function clearScanHistory(){
+  var todayKey=new Date().toISOString().split("T")[0];
+  localStorage.removeItem("scanHistory_"+todayKey);
+  renderScanHistory();
+}
+
 async function runMarketMovers(container) {
   if(!proxyUrl) throw new Error("No proxy URL configured");
 
@@ -1811,7 +1913,7 @@ async function runMarketMovers(container) {
           var flag = String(t.newsFlag||"");
           return !flag.startsWith("SKIP");
         });
-        renderResult(dipResult, moversData);
+        renderResult(dipResult, moversData, true); // appendMode=true — don't wipe existing results
       } else {
         container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--neon-pink)22;border-radius:var(--radius);padding:14px;margin-bottom:12px;font-size:11px;color:var(--text3);font-family:Share Tech Mono,monospace;">'+
           (dipResult.summary||"No high-conviction dip setups in market-wide losers today.")+'</div>';
@@ -2214,7 +2316,7 @@ function prefillJournal(ticker, entry, target){
 //
 // RENDER RESULT
 //
-function renderResult(result,data){
+function renderResult(result, data, appendMode){
   var now      = new Date().toLocaleTimeString();
   var pnlLeft  = Math.max(0, dailyGoal - todayPnL());
   var allTrades    = result.trades||[];
@@ -2389,7 +2491,9 @@ function renderResult(result,data){
   }
 
   html += '<div class="rescan"><p>' + (notifOn?"Hourly reminder on.":"Enable hourly reminder above.") + '</p><button class="btn-sm" onclick="runScan()">Scan Again</button></div>';
-  document.getElementById("scanner-content").innerHTML = html;
+  var sc = document.getElementById("scanner-content");
+  if(appendMode){ sc.innerHTML += html; }
+  else          { sc.innerHTML  = html; }
 }
 
 //
