@@ -1388,7 +1388,9 @@ async function runScan(){
     '<div class="loadbar"><div class="loadbar-inner" style="background:linear-gradient(90deg,' + spinColor + ',#00e5a0)"></div></div>' +
     '</div>';
 
-  // 1. Stock data - fetch for all modes
+  // Log scan to history at START — before Claude calls, once per button press
+  var scanStartTime = Date.now();
+  window._currentScanResult = null; // will be filled in below
   const data={};
   if(proxyUrl){
     showStatus("Fetching real prices from Polygon/Massive...","");
@@ -1540,8 +1542,14 @@ async function runScan(){
   const maybeWatch  = movers.filter(s => (s.dipPct||0) < 0 && Math.abs(s.dipPct||0) >= 0.8 && Math.abs(s.dipPct||0) < 1.5);
   const combined    = [...mustCheck, ...maybeWatch].slice(0, 30);
   const topRows = combined.map(s => {
-    var volStr = s.volNull ? "vol=EARLY(null-first-mins)" : "vol="+(s.volRatio||0)+"x";
-    return s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " " + volStr;
+    var volStr  = s.volNull ? "vol=EARLY" : "vol="+(s.volRatio||0)+"x";
+    var vwapStr = s.vwap ? " VWAP=$"+s.vwap+(s.belowVwap?" (below=bounce zone)":"") : "";
+    var atrStr  = s.atr  ? " ATR=$"+s.atr+(s.atrRemainingDollars!=null?" remain=$"+s.atrRemainingDollars:"") : "";
+    var newsStr = (s.newsStr && s.newsStr !== "NO_RECENT_NEWS")
+      ? " NEWS=["+s.newsStr+"]"
+      : " NEWS=[none]";
+    var blStr   = (window._baseline||{})[s.ticker] ? " baseline=$"+window._baseline[s.ticker].price : "";
+    return s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " " + volStr + vwapStr + atrStr + newsStr + blStr;
   }).join("\n");
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
@@ -1618,6 +1626,33 @@ async function runScan(){
     "    IMPORTANT: only flag OVERNIGHT if RSI < 38 OR dip > 4% with clear institutional support.",
     "",
     "Set targetPrice at minimum " + dipMinTarget + " above entry. Calculate shares needed to reach $" + dailyGoal + " profit.",
+    "",
+    "NEWS FILTER — news headlines from last 7 days are included in DATA.",
+    "Evaluate each stock's news carefully before flagging as BUY:",
+    "",
+    "  SKIP (do not trade) — set newsFlag='SKIP - [reason]':",
+    "    - Earnings reported TODAY or YESTERDAY with negative reaction",
+    "    - CEO/CFO/key executive departure announced",
+    "    - Guidance cut or revenue warning",
+    "    - Fraud, legal action, SEC investigation",
+    "    - Acquisition target (price is frozen at deal price)",
+    "    - Product recall or safety issue",
+    "",
+    "  CAUTION (trade with smaller size) — set newsFlag='CAUTION - [reason]':",
+    "    - Earnings coming in next 1-7 days (gap risk)",
+    "    - Analyst downgrade",
+    "    - Broader sector negative news",
+    "    - Mixed earnings (beat revenue but cut guidance)",
+    "",
+    "  SAFE — set newsFlag='SAFE - [reason]':",
+    "    - No news found",
+    "    - Positive news (contract win, upgrade, partnership)",
+    "    - Old news > 5 days unrelated to today's dip",
+    "    - Sector-wide dip not company-specific",
+    "",
+    "CRITICAL: A 5%+ dip with RSI < 35 that has NO NEWS is likely a technical oversold bounce.",
+    "A 5%+ dip WITH negative earnings/executive news = falling knife, do NOT trade.",
+    "Always set newsSummary to one sentence explaining what the news means for this trade.",
     "",
     "DATA: " + topRows,
     "",
@@ -1753,8 +1788,13 @@ async function runScan(){
   btn.disabled=false;
   const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", movers:"SCAN MOVERS", all:"SCAN ALL"};
   btn.textContent = btnLabels[scanMode]||"SCAN NOW";
-  // Log this scan to history
-  try { logScanToHistory(scanMode, result, null, Object.keys(data).length); } catch(e){}
+  // Log this scan to history — debounced to prevent duplicates
+  var lastLogTs = window._lastScanLogTs||0;
+  var nowTs = Date.now();
+  if(nowTs - lastLogTs > 30000){ // only log if >30 seconds since last log
+    window._lastScanLogTs = nowTs;
+    try { logScanToHistory(scanMode, result, null, Object.keys(data).length); } catch(e){}
+  }
 }
 
 //
@@ -2242,6 +2282,12 @@ async function runGapAnalysis(data) {
     "4. Confidence 85+ only.",
     "5. If baseline delta is positive = stock still moving up since first scan = stronger signal.",
     "6. If baseline delta is negative = stock fading = lower confidence or skip.",
+    "",
+    "NEWS FILTER — news headlines from last 7 days included in DATA:",
+    "  SKIP: earnings TODAY with negative reaction, CEO/CFO departure, guidance cut, fraud/legal",
+    "  BOOST: positive catalyst news (earnings beat + raised guidance, contract win, upgrade) = increase confidence 10pts",
+    "  CAUTION: earnings in next 3 days = gap may reverse on report",
+    "  Gap up WITH positive catalyst = your BEST setup. Gap up with negative news = dead cat bounce, SKIP.",
     "",
     "STOCKS (one per line):",
     gapRows,
