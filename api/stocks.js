@@ -124,8 +124,8 @@ export default async function handler(req, res) {
       const cached = newsCache[ticker];
       if (cached && (now - cached.ts) < NEWS_CACHE_MS) return;
       try {
-        const threeDaysAgo = new Date(today - 3*24*60*60*1000).toISOString().split("T")[0];
-        const newsUrl = `${BASE}/v2/reference/news?ticker=${ticker}&published_utc.gte=${threeDaysAgo}&order=desc&limit=2&apiKey=${POLY_KEY}`;
+        const threeDaysAgo = new Date(today - 7*24*60*60*1000).toISOString().split("T")[0];
+        const newsUrl = `${BASE}/v2/reference/news?ticker=${ticker}&published_utc.gte=${threeDaysAgo}&order=desc&limit=3&apiKey=${POLY_KEY}`;
         const newsJson = await (await fetch(newsUrl)).json();
         const headlines = (newsJson.results||[]).map(a=>({
           title:     a.title||"",
