@@ -826,9 +826,10 @@
 
   <!-- ═══ SCANNER TAB ═══ -->
   <div id="tab-scanner">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
       <button id="mode-dip" onclick="setMode('dip')" style="width:100%;background:var(--surface2);border:2px solid var(--neon-cyan);border-radius:var(--radius);padding:14px 4px;color:var(--neon-cyan);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;text-shadow:var(--glow-cyan);">📉 DIP &amp; BOUNCE</button>
       <button id="mode-gap" onclick="setMode('gap')" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 4px;color:var(--text3);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;">📈 GAP UP</button>
+      <button id="mode-short" onclick="setMode('short')" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 4px;color:var(--text3);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;">🔻 SHORT SELL</button>
       <button id="mode-movers" onclick="setMode('movers')" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 4px;color:var(--text3);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;">⚡ MARKET MOVERS</button>
       <button id="mode-all" onclick="setMode('all')" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 4px;color:var(--text3);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;font-family:'Share Tech Mono',monospace;text-transform:uppercase;">🔥 ALL</button>
     </div>
@@ -1239,14 +1240,59 @@ async function toggleNotif(){
 function setMode(mode){
   scanMode = mode;
   localStorage.setItem("scanMode", mode);
-  var dipBtn  = document.getElementById("mode-dip");
-  var gapBtn  = document.getElementById("mode-gap");
-  var bothBtn = null; // legacy - no longer used
-  if(!dipBtn || !gapBtn) return;
   var dipBtn   = document.getElementById("mode-dip");
   var gapBtn   = document.getElementById("mode-gap");
+  var shortBtn = document.getElementById("mode-short");
   var moversBtn= document.getElementById("mode-movers");
   var allBtn   = document.getElementById("mode-all");
+  if(!dipBtn || !gapBtn) return;
+
+  [dipBtn,gapBtn,shortBtn,moversBtn,allBtn].forEach(function(b){
+    if(!b) return;
+    b.style.background="var(--surface)";
+    b.style.border="1px solid var(--border)";
+    b.style.color="var(--text3)";
+    b.style.boxShadow="none";
+    b.style.textShadow="none";
+  });
+
+  if(mode==="dip"    && dipBtn)   { dipBtn.style.background="var(--surface2)";    dipBtn.style.border="2px solid var(--neon-cyan)";   dipBtn.style.color="var(--neon-cyan)";   dipBtn.style.textShadow="var(--glow-cyan)"; }
+  if(mode==="gap"    && gapBtn)   { gapBtn.style.background="var(--surface2)";    gapBtn.style.border="2px solid var(--neon-pink)";   gapBtn.style.color="var(--neon-pink)";   gapBtn.style.textShadow="var(--glow-pink)"; }
+  if(mode==="short"  && shortBtn) { shortBtn.style.background="var(--surface2)";  shortBtn.style.border="2px solid #ff6600";          shortBtn.style.color="#ff6600";          shortBtn.style.textShadow="0 0 8px #ff660066"; }
+  if(mode==="movers" && moversBtn){ moversBtn.style.background="var(--surface2)"; moversBtn.style.border="2px solid var(--neon-amber)"; moversBtn.style.color="var(--neon-amber)"; moversBtn.style.textShadow="var(--glow-amber)"; }
+  if(mode==="all"    && allBtn)   { allBtn.style.background="var(--surface2)";    allBtn.style.border="2px solid var(--neon-green)";  allBtn.style.color="var(--neon-green)";  allBtn.style.textShadow="var(--glow-green)"; }
+
+  var hintEl = document.getElementById("mode-hint");
+  var hints = {
+    dip:    "DIP AND BOUNCE — USE ANY TIME DURING MARKET HOURS",
+    gap:    "GAP UP — BEST AT 9:31AM OPEN",
+    short:  "SHORT SELL — SELL OVERBOUGHT STOCKS, BUY COVER WHEN THEY FALL",
+    movers: "MARKET MOVERS — TOP 20 GAINERS + LOSERS FROM ENTIRE MARKET",
+    all:    "ALL — RUNS DIP + GAP UP + MARKET MOVERS SIMULTANEOUSLY"
+  };
+  if(hintEl) hintEl.textContent = hints[mode]||hints.dip;
+
+  var scanBtn = document.getElementById("scan-btn");
+  var scanColors  = {dip:"var(--neon-cyan)", gap:"var(--neon-pink)", short:"#ff6600", movers:"var(--neon-amber)", all:"var(--neon-green)"};
+  var scanGlows   = {dip:"var(--glow-cyan)", gap:"var(--glow-pink)", short:"0 0 8px #ff660066,0 0 24px #ff660022", movers:"var(--glow-amber)", all:"var(--glow-green)"};
+  if(scanBtn){
+    scanBtn.style.background  = "transparent";
+    scanBtn.style.border      = "2px solid "+(scanColors[mode]||scanColors.dip);
+    scanBtn.style.color       = scanColors[mode]||scanColors.dip;
+    scanBtn.style.textShadow  = scanGlows[mode]||scanGlows.dip;
+    scanBtn.style.boxShadow   = scanGlows[mode]||scanGlows.dip;
+  }
+
+  var sc = document.getElementById("scanner-content");
+  var modeDesc = {
+    dip:    "DIP AND BOUNCE\n\nScans 120 stocks for dips below yesterday close.\nBest any time during market hours.",
+    gap:    "GAP UP\n\nScans 120 stocks for stocks gapping up.\nBest at 9:31am market open.",
+    short:  "SHORT SELL\n\nScans 120 stocks for overbought stocks to short.\nLook for: RSI > 72, extended 5%+ from open, fading volume.\nSell short at peak, buy cover when price drops.\n\n⚠️ SHORT SELLING HAS UNLIMITED LOSS POTENTIAL.\nALWAYS USE STOP LOSSES.",
+    movers: "MARKET MOVERS\n\nFetches top 20 gainers and top 20 losers\nfrom the ENTIRE US stock market via Polygon.",
+    all:    "ALL SCANNERS\n\nRuns Dip + Gap Up + Market Movers\nsimultaneously. Full picture of the market."
+  };
+  if(sc) sc.innerHTML = '<div class="idle"><div class="icon">⚡</div><p>'+modeDesc[mode].replace(/\n/g,"<br>")+'<br><br>PRESS SCAN NOW TO START.</p></div>';
+}
 
   // Reset all buttons
   [dipBtn,gapBtn,moversBtn,allBtn].forEach(function(b){
@@ -1256,62 +1302,6 @@ function setMode(mode){
     b.style.color="var(--text3)";
     b.style.boxShadow="none";
     b.style.textShadow="none";
-  });
-
-  // Activate selected
-  if(mode==="dip" && dipBtn){
-    dipBtn.style.background="var(--surface2)"; dipBtn.style.border="2px solid var(--neon-cyan)";
-    dipBtn.style.color="var(--neon-cyan)"; dipBtn.style.textShadow="var(--glow-cyan)";
-  }
-  if(mode==="gap" && gapBtn){
-    gapBtn.style.background="var(--surface2)"; gapBtn.style.border="2px solid var(--neon-pink)";
-    gapBtn.style.color="var(--neon-pink)"; gapBtn.style.textShadow="var(--glow-pink)";
-  }
-  if(mode==="movers" && moversBtn){
-    moversBtn.style.background="var(--surface2)"; moversBtn.style.border="2px solid var(--neon-amber)";
-    moversBtn.style.color="var(--neon-amber)"; moversBtn.style.textShadow="var(--glow-amber)";
-  }
-  if(mode==="all" && allBtn){
-    allBtn.style.background="var(--surface2)"; allBtn.style.border="2px solid var(--neon-green)";
-    allBtn.style.color="var(--neon-green)"; allBtn.style.textShadow="var(--glow-green)";
-  }
-
-  var hintEl = document.getElementById("mode-hint");
-  var hints = {
-    dip:    "DIP AND BOUNCE — USE ANY TIME DURING MARKET HOURS",
-    gap:    "GAP UP — BEST AT 9:31AM OPEN",
-    movers: "MARKET MOVERS — TOP 20 GAINERS + LOSERS FROM ENTIRE MARKET",
-    all:    "ALL — RUNS DIP + GAP UP + MARKET MOVERS SIMULTANEOUSLY"
-  };
-  if(hintEl) hintEl.textContent = hints[mode] || hints.dip;
-
-  var scanBtn = document.getElementById("scan-btn");
-  var scanColors = {
-    dip:    "transparent",
-    gap:    "transparent",
-    movers: "transparent",
-    all:    "transparent"
-  };
-  var scanBorders = {
-    dip:    "2px solid var(--neon-cyan)",
-    gap:    "2px solid var(--neon-pink)",
-    movers: "2px solid var(--neon-amber)",
-    all:    "2px solid var(--neon-green)"
-  };
-  var scanTextColors = {
-    dip:    "var(--neon-cyan)",
-    gap:    "var(--neon-pink)",
-    movers: "var(--neon-amber)",
-    all:    "var(--neon-green)"
-  };
-  if(scanBtn){
-    scanBtn.style.background = scanColors[mode]||scanColors.dip;
-    scanBtn.style.border     = scanBorders[mode]||scanBorders.dip;
-    scanBtn.style.color      = scanTextColors[mode]||scanTextColors.dip;
-    scanBtn.style.textShadow = mode==="dip"?"var(--glow-cyan)":mode==="gap"?"var(--glow-pink)":mode==="movers"?"var(--glow-amber)":"var(--glow-green)";
-    scanBtn.style.boxShadow  = mode==="dip"?"var(--glow-cyan)":mode==="gap"?"var(--glow-pink)":mode==="movers"?"var(--glow-amber)":"var(--glow-green)";
-  }
-
   var sc = document.getElementById("scanner-content");
   var modeDesc = {
     dip:    "DIP AND BOUNCE\n\nScans 120 stocks for dips below yesterday close.\nBest any time during market hours.",
@@ -1378,8 +1368,8 @@ async function runScan(){
   const btn=document.getElementById("scan-btn");
   btn.disabled=true; btn.textContent=" SCANNING...";
   showStatus("","");
-  const spinColor = scanMode==="gap"?"var(--neon-pink)":scanMode==="movers"?"var(--neon-amber)":scanMode==="all"?"var(--neon-green)":"var(--neon-cyan)";
-  const modeLabel = scanMode==="gap"?"GAP UP SCANNER":scanMode==="movers"?"MARKET MOVERS SCANNER":scanMode==="all"?"ALL SCANNERS":"DIP & BOUNCE SCANNER";
+  const spinColor = scanMode==="gap"?"var(--neon-pink)":scanMode==="short"?"#ff6600":scanMode==="movers"?"var(--neon-amber)":scanMode==="all"?"var(--neon-green)":"var(--neon-cyan)";
+  const modeLabel = scanMode==="gap"?"GAP UP SCANNER":scanMode==="short"?"SHORT SELL SCANNER":scanMode==="movers"?"MARKET MOVERS SCANNER":scanMode==="all"?"ALL SCANNERS":"DIP & BOUNCE SCANNER";
   document.getElementById("scanner-content").innerHTML =
     '<div class="loading">' +
     '<div class="spinner" style="border-top-color:' + spinColor + '"></div>' +
@@ -1747,6 +1737,17 @@ async function runScan(){
   const container = document.getElementById("scanner-content");
   container.innerHTML = "";
 
+  if(scanMode === "short"){
+    if(scanMode === "short") container.innerHTML += '<div style="font-size:9px;color:#ff6600;letter-spacing:3px;margin:8px 0;font-family:\'Share Tech Mono\',monospace;text-shadow:0 0 8px #ff660066;">🔻 SHORT SELL SCANNER</div>';
+    try {
+      const shortResult = await runShortAnalysis(data);
+      renderShortResult(shortResult, data, container);
+    } catch(shortErr) {
+      console.error("[Short] Error:", shortErr);
+      container.innerHTML += '<div style="background:var(--surface);border:1px solid #ff660033;border-radius:var(--radius);padding:14px;"><div style="color:#ff6600;font-size:11px">⚠ Short scanner error: ' + shortErr.message + '</div></div>';
+    }
+  }
+
   if(scanMode === "dip" || scanMode === "all"){
     if(scanMode === "all") container.innerHTML += '<div style="font-size:9px;color:var(--neon-cyan);letter-spacing:3px;margin:8px 0;font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-cyan);">📉 DIP &amp; BOUNCE SCANNER</div>';
     if(result.trades) result.trades = result.trades.filter(function(t){ return !String(t.newsFlag||"").startsWith("SKIP"); });
@@ -1786,7 +1787,7 @@ async function runScan(){
 
   scanning=false;
   btn.disabled=false;
-  const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", movers:"SCAN MOVERS", all:"SCAN ALL"};
+  const btnLabels = {dip:"SCAN NOW", gap:"SCAN GAP UP", short:"SCAN SHORT SELL", movers:"SCAN MOVERS", all:"SCAN ALL"};
   btn.textContent = btnLabels[scanMode]||"SCAN NOW";
   // Log this scan to history — debounced to prevent duplicates
   var lastLogTs = window._lastScanLogTs||0;
@@ -2128,6 +2129,138 @@ async function runMarketMovers(container) {
   });
   rawHtml += '</div>';
   container.innerHTML += rawHtml;
+}
+
+
+//
+// SHORT SELL SCANNER
+//
+async function runShortAnalysis(data) {
+  var now      = new Date();
+  var etNow    = new Date(now.toLocaleString("en-US",{timeZone:"America/New_York"}));
+  var totalMin = etNow.getHours()*60 + etNow.getMinutes();
+  var minsLeft = Math.max(0, (15*60+30) - totalMin);
+
+  var shortCandidates = Object.values(data).filter(function(s){
+    if(!s.curr || !s.prev) return false;
+    var gainPct = ((s.curr - s.prev) / s.prev) * 100;
+    var rsi = s.rsi || 0;
+    var movedFromOpen = s.openPrice > 0 ? ((s.curr - s.openPrice) / s.openPrice) * 100 : 0;
+    if(gainPct < 1.5) return false;
+    var isOverbought = rsi >= 72;
+    var isExtended   = movedFromOpen >= 5;
+    var isBigGap     = gainPct >= 5;
+    return isOverbought || isExtended || isBigGap;
+  }).sort(function(a,b){ return (b.rsi||0)-(a.rsi||0); }).slice(0,15);
+
+  if(shortCandidates.length===0){
+    return {verdict:"NO SHORT SETUPS",summary:"No stocks are sufficiently overbought or extended to short today.",setups:[]};
+  }
+
+  var timeStr = minsLeft>60 ? minsLeft+" mins to close — enough time for intraday short"
+    : minsLeft+" mins to close — tight window, high conviction only";
+
+  var shortRows = shortCandidates.map(function(s){
+    var gainPct   = (((s.curr-s.prev)/s.prev)*100).toFixed(2);
+    var fromOpen  = s.openPrice>0 ? (((s.curr-s.openPrice)/s.openPrice)*100).toFixed(2) : "N/A";
+    var volStr    = s.volNull ? "vol=early" : "vol="+(s.volRatio||"--")+"x";
+    var newsStr   = (s.newsStr&&s.newsStr!=="NO_RECENT_NEWS") ? " NEWS=["+s.newsStr+"]" : " NEWS=[none]";
+    var blStr     = (window._baseline||{})[s.ticker] ? " baseline=$"+window._baseline[s.ticker].price : "";
+    return s.ticker+": $"+s.curr+" up=+"+gainPct+"% fromOpen="+fromOpen+"% RSI="+(s.rsi||"N/A")+" "+volStr+newsStr+blStr;
+  }).join("\n");
+
+  var shortPrompt = [
+    "You are an expert short seller. Account $"+capital+". Goal $"+dailyGoal+"/day. "+timeStr,
+    "",
+    "Find SHORT SELL setups — stocks that are overbought and will fall.",
+    "Short sell = borrow and sell now at high price, buy back cheaper when it drops.",
+    "",
+    "RULES:",
+    "1. RSI >= 72 = overbought. RSI >= 80 = best setup.",
+    "2. Stock moved 5%+ from open = buying exhausted.",
+    "3. Volume fading (< 0.8x) = momentum dying.",
+    "4. Negative news = price propped up temporarily, will fall fast.",
+    "5. AVOID: strong positive catalyst, RSI still rising, volume accelerating.",
+    "",
+    "coverPrice = entryPrice minus 40-60% of today's total gain.",
+    "stopLoss = entryPrice + (ATR * 0.3) — exit if wrong.",
+    "Confidence 85+ only. Max 5 setups.",
+    "",
+    "NEWS: negative earnings/CFO departure/guidance cut = BEST short. No news = technical short. Positive news = SKIP.",
+    "",
+    "STOCKS:",
+    shortRows,
+    "",
+    'Return JSON: {"verdict":"SHORT SETUPS FOUND or NO SHORT SETUPS","summary":"one sentence","setups":[{ticker,confidence,entryPrice,coverPrice,stopLoss,profitPerShare,gainedToday,reason,newsFlag,riskLevel,shortType}]}',
+    "shortType: EARNINGS_FADE or OVERBOUGHT or EXTENDED",
+    "Raw JSON only."
+  ].join("\n");
+
+  var claudeUrl = proxyUrl+"/api/claude";
+  var resp = await fetch(claudeUrl,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({max_tokens:1500,messages:[{role:"user",content:shortPrompt}]})});
+  var rd   = await resp.json();
+  var text = (rd.content||[]).map(function(c){return c.text||"";}).join("");
+  return JSON.parse(text.replace(/```json|```/g,"").trim());
+}
+
+function renderShortResult(result, data, container){
+  if(!container) container=document.getElementById("scanner-content");
+  var isFound = result.verdict==="SHORT SETUPS FOUND";
+  container.innerHTML += '<div style="background:var(--surface);border:1px solid '+(isFound?"#ff660033":"var(--border)")+';border-radius:var(--radius);padding:16px;margin-bottom:14px;display:flex;gap:12px;"><span style="font-size:24px">🔻</span><div><div style="font-size:11px;font-weight:700;letter-spacing:3px;color:'+(isFound?"#ff6600":"var(--text3)")+';font-family:\'Share Tech Mono\',monospace;margin-bottom:6px;">'+(result.verdict||"NO SHORT SETUPS")+'</div><div style="font-size:11px;color:var(--text2);">'+(result.summary||"")+'</div></div></div>';
+  if(!result.setups||result.setups.length===0) return;
+  container.innerHTML += '<div style="background:#ff660011;border:1px solid #ff660044;border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:10px;color:#ff6600;font-family:\'Share Tech Mono\',monospace;">⚠️ SHORT SELLING: If price goes UP past stop loss, losses are UNLIMITED. Set stop loss on Robinhood immediately after shorting.</div>';
+  container.innerHTML += '<div style="font-size:9px;color:#ff6600;letter-spacing:3px;margin-bottom:10px;font-family:\'Share Tech Mono\',monospace;">🔻 SHORT SELL SETUPS — '+result.setups.length+' FOUND</div>';
+
+  result.setups.forEach(function(setup){
+    var sd = data[setup.ticker]||{};
+    var gps = parseFloat((parseFloat(setup.entryPrice||0)-parseFloat(setup.coverPrice||0)).toFixed(2));
+    var shares = gps>0 ? Math.ceil(parseFloat(dailyGoal)/gps) : "--";
+    var totalCost = shares!=="--" ? "$"+(shares*parseFloat(setup.entryPrice)).toFixed(2) : "--";
+    var profit    = shares!=="--" ? "$"+(shares*gps).toFixed(0) : "--";
+    var maxLoss   = shares!=="--" ? "$"+Math.abs(shares*(parseFloat(setup.stopLoss)-parseFloat(setup.entryPrice))).toFixed(0) : "--";
+    var confColor = setup.confidence>=90?"var(--neon-green)":"#ff6600";
+    var riskClass = setup.riskLevel==="LOW"?"pill-low":setup.riskLevel==="HIGH"?"pill-hi":"pill-med";
+
+    var html='<div style="background:var(--surface);border:1px solid #ff660033;border-left:2px solid #ff6600;border-radius:var(--radius);padding:16px;margin-bottom:14px;position:relative;overflow:hidden;">';
+    html+='<div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,#ff660088,transparent);"></div>';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">';
+    html+='<div style="width:50px;height:50px;border-radius:50%;border:2px solid '+confColor+';box-shadow:0 0 10px '+confColor+'44;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;">';
+    html+='<span style="font-size:15px;font-weight:700;color:'+confColor+';font-family:\'Share Tech Mono\',monospace;">'+setup.confidence+'</span>';
+    html+='<span style="font-size:6px;color:'+confColor+'99;font-family:\'Share Tech Mono\',monospace;">CONF</span></div>';
+    html+='<span style="font-size:22px;font-weight:700;color:#ff6600;letter-spacing:2px;font-family:\'Share Tech Mono\',monospace;">'+setup.ticker+'</span>';
+    html+='<span style="font-size:8px;padding:3px 10px;border-radius:2px;letter-spacing:2px;color:#ff6600;border:1px solid #ff660066;font-family:\'Share Tech Mono\',monospace;">SELL SHORT</span>';
+    html+='<span class="pill '+riskClass+'">'+(setup.riskLevel||"")+'</span>';
+    if(setup.shortType) html+='<span style="font-size:8px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;margin-left:auto;">'+(setup.shortType||"").replace(/_/g," ")+'</span>';
+    html+='</div>';
+    html+='<div style="background:#ff660011;border:1px solid #ff660022;border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;">';
+    html+='<div style="font-size:10px;font-weight:700;color:#ff6600;letter-spacing:1px;font-family:\'Share Tech Mono\',monospace;">🔻 SELL SHORT NOW → BUY TO COVER WHEN IT DROPS</div>';
+    html+='<div style="font-size:10px;color:#ff660099;margin-top:3px;">'+(setup.reason||"")+'</div></div>';
+    if(setup.newsFlag) html+='<div style="font-size:10px;color:var(--neon-amber);border:1px solid var(--neon-amber)33;border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;font-family:\'Share Tech Mono\',monospace;">NEWS: '+setup.newsFlag+'</div>';
+    html+='<div class="price-grid">';
+    html+='<div class="price-cell"><div class="price-label">SELL SHORT @</div><div class="price-val" style="color:#ff6600;">$'+setup.entryPrice+'</div></div>';
+    html+='<div class="price-cell"><div class="price-label">BUY COVER @</div><div class="price-val" style="color:var(--neon-green);">$'+setup.coverPrice+'</div></div>';
+    html+='<div class="price-cell"><div class="price-label">STOP LOSS</div><div class="price-val" style="color:var(--neon-pink);">$'+setup.stopLoss+'</div></div>';
+    html+='<div class="price-cell"><div class="price-label">PROFIT/SHARE</div><div class="price-val" style="color:var(--neon-green);">$'+gps.toFixed(2)+'</div></div>';
+    html+='<div class="price-cell"><div class="price-label">RSI</div><div class="price-val" style="color:var(--neon-pink);">'+(sd.rsi||"--")+'</div></div>';
+    html+='<div class="price-cell"><div class="price-label">UP TODAY</div><div class="price-val" style="color:#ff6600;">'+(setup.gainedToday||"--")+'</div></div>';
+    html+='</div>';
+    if(shares!=="--"){
+      html+='<div class="pos-calc"><div class="pos-calc-title">SHORT POSITION — $'+dailyGoal+'/DAY TARGET</div>';
+      html+='<div class="pos-grid">';
+      html+='<div class="pos-cell"><div class="pos-label">SHARES TO SHORT</div><div class="pos-val" style="color:#ff6600;">'+shares+'</div></div>';
+      html+='<div class="pos-cell"><div class="pos-label">TOTAL EXPOSURE</div><div class="pos-val">'+totalCost+'</div></div>';
+      html+='<div class="pos-cell"><div class="pos-label">PROFIT TARGET</div><div class="pos-val" style="color:var(--neon-green);">'+profit+'</div></div>';
+      html+='<div class="pos-cell"><div class="pos-label">MAX LOSS</div><div class="pos-val" style="color:var(--neon-pink);">'+maxLoss+'</div></div>';
+      html+='</div>';
+      html+='<div style="font-size:10px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">Short '+shares+' @ $'+setup.entryPrice+' → cover @ $'+setup.coverPrice+' | Stop: $'+setup.stopLoss+'</div></div>';
+    }
+    html+='<div style="display:flex;gap:8px;margin-top:6px;">';
+    html+='<button class="log-btn" style="flex:1;border-color:#ff660033;color:#ff6600;">+ LOG SHORT TRADE</button>';
+    html+='<button class="log-btn" style="flex:1;" onclick="addToHoldCheck(\''+setup.ticker+'\','+setup.entryPrice+','+(shares||1)+')">+ ADD TO 3:30 CHECK</button>';
+    html+='</div></div>';
+    container.innerHTML += html;
+  });
 }
 
 async function runGapAnalysis(data) {
