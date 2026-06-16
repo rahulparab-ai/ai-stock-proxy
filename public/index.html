@@ -1294,24 +1294,6 @@ function setMode(mode){
   if(sc) sc.innerHTML = '<div class="idle"><div class="icon">⚡</div><p>'+modeDesc[mode].replace(/\n/g,"<br>")+'<br><br>PRESS SCAN NOW TO START.</p></div>';
 }
 
-  // Reset all buttons
-  [dipBtn,gapBtn,moversBtn,allBtn].forEach(function(b){
-    if(!b) return;
-    b.style.background="var(--surface)";
-    b.style.border="1px solid var(--border)";
-    b.style.color="var(--text3)";
-    b.style.boxShadow="none";
-    b.style.textShadow="none";
-  var sc = document.getElementById("scanner-content");
-  var modeDesc = {
-    dip:    "DIP AND BOUNCE\n\nScans 120 stocks for dips below yesterday close.\nBest any time during market hours.",
-    gap:    "GAP UP\n\nScans 120 stocks for stocks gapping up.\nBest at 9:31am market open.",
-    movers: "MARKET MOVERS\n\nFetches top 20 gainers and top 20 losers\nfrom the ENTIRE US stock market via Polygon.\nCatches stocks outside your 120 watchlist.",
-    all:    "ALL SCANNERS\n\nRuns Dip + Gap Up + Market Movers\nsimultaneously. Full picture of the market."
-  };
-  if(sc) sc.innerHTML = '<div class="idle"><div class="icon">⚡</div><p>'+modeDesc[mode].replace(/\n/g,"<br>")+'<br><br>PRESS SCAN NOW TO START.</p></div>';
-}
-
 //
 // SIMULATED DATA (fallback)
 //
