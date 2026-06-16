@@ -817,6 +817,7 @@
   <!-- TABS -->
   <div class="tabs">
     <button class="tab active" onclick="showTab('scanner')">Scanner</button>
+    <button class="tab" onclick="showTab('volatile')">⚡ Volatile</button>
     <button class="tab" onclick="showTab('holdcheck')">3:30 Check</button>
     <button class="tab" onclick="showTab('history')">History</button>
     <button class="tab" onclick="showTab('watchlist')">Watchlist</button>
@@ -844,6 +845,51 @@
       </div>
     </div>
   </div>
+  <!-- ═══ VOLATILE SWEET SPOT TAB ═══ -->
+  <div id="tab-volatile" style="display:none">
+
+    <!-- Header -->
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--neon-amber);letter-spacing:2px;font-family:'Share Tech Mono',monospace;text-shadow:var(--glow-amber);margin-bottom:4px;">⚡ VOLATILE SWEET SPOT</div>
+      <div style="font-size:10px;color:var(--text3);font-family:'Share Tech Mono',monospace;line-height:1.8;">Stocks priced $150-$200 with $15-$20 daily ATR.<br>Best for swing trades — big dollar moves, manageable share count.</div>
+    </div>
+
+    <!-- Price + ATR range controls -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+      <div style="font-size:8px;color:var(--neon-amber);letter-spacing:2px;margin-bottom:10px;font-family:'Share Tech Mono',monospace;">FILTER SETTINGS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">MIN PRICE $</div>
+          <input id="vol-min-price" type="number" value="150" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">MAX PRICE $</div>
+          <input id="vol-max-price" type="number" value="200" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">MIN ATR $</div>
+          <input id="vol-min-atr" type="number" value="15" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">MAX ATR $</div>
+          <input id="vol-max-atr" type="number" value="20" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button onclick="runVolatileScan('watchlist')" style="background:transparent;border:1px solid var(--neon-amber);border-radius:var(--radius);padding:11px;color:var(--neon-amber);font-size:10px;font-weight:700;cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:1px;text-shadow:var(--glow-amber);">SCAN MY 120 STOCKS</button>
+        <button onclick="runVolatileScan('market')" style="background:transparent;border:1px solid var(--neon-cyan);border-radius:var(--radius);padding:11px;color:var(--neon-cyan);font-size:10px;font-weight:700;cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:1px;text-shadow:var(--glow-cyan);">SCAN FULL MARKET</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="volatile-results">
+      <div class="idle" style="padding:30px 20px;">
+        <div class="icon">⚡</div>
+        <p>SCAN MY 120 STOCKS — INSTANT<br><br>SCAN FULL MARKET — FETCHES ALL US STOCKS<br>FILTERED BY PRICE + ATR RANGE<br><br>RUNS SEPARATELY — NEVER AUTO-TRIGGERED</p>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ HOLD/SELL CHECK TAB ═══ -->
   <div id="tab-holdcheck" style="display:none">
 
@@ -1129,7 +1175,7 @@ window.onload = function(){
 // TABS
 //
 function showTab(name){
-  var allTabs = ["scanner","holdcheck","history","watchlist","journal","setup"];
+  var allTabs = ["scanner","volatile","holdcheck","history","watchlist","journal","setup"];
   allTabs.forEach(function(t){
     var el = document.getElementById("tab-"+t);
     if(el) el.style.display = (t===name?"block":"none");
@@ -2966,6 +3012,130 @@ function addToHoldCheck(ticker, entryPrice, shares){
   if(confirmEl) confirmEl.innerHTML = '<div style="background:#00e5a011;border:1px solid #00e5a033;border-radius:8px;padding:12px;margin-bottom:10px;font-size:11px;color:#00e5a0">✅ Added '+ticker+' — '+shares+' shares @ $'+entryPrice+'. Run check at 3:30pm.</div>';
 }
 
+// ─── VOLATILE SWEET SPOT SCANNER ─────────────────────────────────
+async function runVolatileScan(source){
+  var minPrice = parseFloat(document.getElementById("vol-min-price").value)||150;
+  var maxPrice = parseFloat(document.getElementById("vol-max-price").value)||200;
+  var minAtr   = parseFloat(document.getElementById("vol-min-atr").value)||15;
+  var maxAtr   = parseFloat(document.getElementById("vol-max-atr").value)||20;
+  var el       = document.getElementById("volatile-results");
+
+  el.innerHTML = '<div class="loading"><div class="spinner"></div><div style="color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;font-size:11px;letter-spacing:2px;">'+(source==="market"?"SCANNING FULL MARKET — THIS MAY TAKE 20-30 SECONDS...":"SCANNING YOUR 120 STOCKS...")+'</div><div class="loadbar"><div class="loadbar-inner"></div></div></div>';
+
+  try {
+    var results = [];
+
+    if(source === "watchlist"){
+      // Use already-fetched data from last scan if available
+      // Otherwise fetch fresh from stocks.js
+      if(proxyUrl){
+        var resp = await fetch(proxyUrl+"/api/stocks?tickers="+watchlist.join(","));
+        var json = await resp.json();
+        var stocks = json.stocks||[];
+        results = stocks.filter(function(s){
+          if(s.error || s.delisted) return false;
+          var price = s.curr||0;
+          var atr   = s.atr||0;
+          return price >= minPrice && price <= maxPrice && atr >= minAtr && atr <= maxAtr;
+        }).sort(function(a,b){ return (b.atr||0)-(a.atr||0); });
+      }
+    } else {
+      // Full market scan via volatility endpoint
+      var url = proxyUrl+"/api/volatility?minPrice="+minPrice+"&maxPrice="+maxPrice+"&minAtr="+minAtr+"&maxAtr="+maxAtr;
+      var resp = await fetch(url);
+      var json = await resp.json();
+      results = json.stocks||[];
+    }
+
+    renderVolatileResults(results, minPrice, maxPrice, minAtr, maxAtr, source);
+
+  } catch(err) {
+    el.innerHTML = '<div style="background:var(--surface);border:1px solid var(--neon-pink)33;border-radius:var(--radius);padding:14px;color:var(--neon-pink);font-family:\'Share Tech Mono\',monospace;font-size:11px;">⚠ Error: '+err.message+'</div>';
+  }
+}
+
+function renderVolatileResults(stocks, minPrice, maxPrice, minAtr, maxAtr, source){
+  var el = document.getElementById("volatile-results");
+  if(!stocks || stocks.length===0){
+    el.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;"><div style="font-size:11px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">NO STOCKS FOUND<br><br>Try widening the price or ATR range.<br>E.g. $100-$250 with ATR $10-$25</div></div>';
+    return;
+  }
+
+  var html = '<div style="font-size:9px;color:var(--neon-amber);letter-spacing:2px;margin-bottom:10px;font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-amber);">⚡ '+stocks.length+' STOCKS FOUND — $'+minPrice+'-$'+maxPrice+' | ATR $'+minAtr+'-$'+maxAtr+'</div>';
+
+  // Summary stats
+  var avgAtr   = (stocks.reduce(function(s,t){return s+(t.atr||0);},0)/stocks.length).toFixed(2);
+  var avgPrice = (stocks.reduce(function(s,t){return s+(t.curr||0);},0)/stocks.length).toFixed(2);
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">';
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;"><div style="font-size:7px;color:var(--text3);letter-spacing:2px;font-family:\'Share Tech Mono\',monospace;margin-bottom:4px;">FOUND</div><div style="font-size:18px;font-weight:700;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;">'+stocks.length+'</div></div>';
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;"><div style="font-size:7px;color:var(--text3);letter-spacing:2px;font-family:\'Share Tech Mono\',monospace;margin-bottom:4px;">AVG PRICE</div><div style="font-size:18px;font-weight:700;color:var(--text);font-family:\'Share Tech Mono\',monospace;">$'+avgPrice+'</div></div>';
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;"><div style="font-size:7px;color:var(--text3);letter-spacing:2px;font-family:\'Share Tech Mono\',monospace;margin-bottom:4px;">AVG ATR</div><div style="font-size:18px;font-weight:700;color:var(--neon-green);font-family:\'Share Tech Mono\',monospace;">$'+avgAtr+'</div></div>';
+  html += '</div>';
+
+  // Why this matters explanation
+  html += '<div style="background:var(--surface2);border:1px solid var(--neon-amber)22;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:10px;color:var(--text2);font-family:\'Share Tech Mono\',monospace;line-height:1.8;">';
+  html += '💡 At $'+minAtr+'-$'+maxAtr+' ATR: buy <strong style="color:var(--neon-amber);">'+(Math.ceil(200/minAtr))+'-'+(Math.ceil(200/maxAtr))+' shares</strong> for $200 profit target at entry ~$'+Math.round((parseFloat(avgPrice))).toFixed(0)+'.';
+  html += '</div>';
+
+  // Stock cards
+  stocks.forEach(function(s){
+    var inWatch = watchlist.includes(s.ticker);
+    var atrPct  = s.atr && s.curr ? ((s.atr/s.curr)*100).toFixed(1) : "--";
+    var sharesNeeded = s.atr ? Math.ceil(200/s.atr) : "--";
+    var totalCost    = (sharesNeeded!=="--" && s.curr) ? "$"+(sharesNeeded*s.curr).toFixed(0) : "--";
+    var dipColor     = (s.dipPct||0) < -1 ? "var(--neon-green)" : (s.dipPct||0) > 1 ? "var(--neon-pink)" : "var(--text3)";
+
+    html += '<div style="background:var(--surface);border:1px solid var(--neon-amber)22;border-left:2px solid var(--neon-amber);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
+    html += '<span style="font-size:14px;font-weight:700;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-amber);width:60px;">'+s.ticker+'</span>';
+    html += '<span style="font-size:14px;font-weight:700;color:var(--text);font-family:\'Share Tech Mono\',monospace;">$'+(s.curr||"--")+'</span>';
+    if(s.dipPct && s.dipPct!==0) html += '<span style="font-size:11px;color:'+dipColor+';font-family:\'Share Tech Mono\',monospace;">'+(s.dipPct>0?"+":"")+s.dipPct+'%</span>';
+    html += '<span style="margin-left:auto;font-size:8px;color:var(--neon-amber);border:1px solid var(--neon-amber)44;padding:2px 8px;border-radius:2px;font-family:\'Share Tech Mono\',monospace;">ATR $'+(s.atr||"--")+'</span>';
+    html += '</div>';
+
+    // Stats grid
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;">';
+    html += '<div style="background:var(--surface2);border-radius:var(--radius);padding:6px;text-align:center;">';
+    html += '<div style="font-size:7px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;margin-bottom:2px;">ATR%</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--neon-green);font-family:\'Share Tech Mono\',monospace;">'+atrPct+'%</div></div>';
+    html += '<div style="background:var(--surface2);border-radius:var(--radius);padding:6px;text-align:center;">';
+    html += '<div style="font-size:7px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;margin-bottom:2px;">SHARES</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--neon-cyan);font-family:\'Share Tech Mono\',monospace;">'+sharesNeeded+'</div></div>';
+    html += '<div style="background:var(--surface2);border-radius:var(--radius);padding:6px;text-align:center;">';
+    html += '<div style="font-size:7px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;margin-bottom:2px;">COST</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text);font-family:\'Share Tech Mono\',monospace;">'+totalCost+'</div></div>';
+    html += '<div style="background:var(--surface2);border-radius:var(--radius);padding:6px;text-align:center;">';
+    html += '<div style="font-size:7px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;margin-bottom:2px;">RSI</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:'+((s.rsi||99)>70?"var(--neon-pink)":(s.rsi||0)<35?"var(--neon-green)":"var(--neon-amber)")+';font-family:\'Share Tech Mono\',monospace;">'+(s.rsi||"--")+'</div></div>';
+    html += '</div>';
+
+    // Action buttons
+    html += '<div style="display:flex;gap:6px;">';
+    if(!inWatch){
+      html += '<button onclick="addVolatileToWatchlist(\''+s.ticker+'\')" style="flex:1;background:transparent;border:1px solid var(--neon-amber)44;border-radius:var(--radius);padding:7px;color:var(--neon-amber);font-size:9px;cursor:pointer;font-family:\'Share Tech Mono\',monospace;letter-spacing:1px;">+ ADD TO WATCHLIST</button>';
+    } else {
+      html += '<div style="flex:1;text-align:center;font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;padding:7px;">✓ IN YOUR WATCHLIST</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  });
+
+  // Source note
+  html += '<div style="font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;text-align:center;margin-top:8px;letter-spacing:1px;">Source: '+(source==="market"?"Full US Market via Polygon":"Your 120-stock watchlist")+' | ATR based on 14-day average</div>';
+
+  el.innerHTML = html;
+}
+
+function addVolatileToWatchlist(ticker){
+  if(watchlist.includes(ticker)) return;
+  watchlist.push(ticker);
+  localStorage.setItem("watchlist", JSON.stringify(watchlist));
+  renderWatchlist();
+  // Update button
+  event.target.textContent = "✓ ADDED";
+  event.target.style.color = "var(--neon-green)";
+  event.target.disabled = true;
+}
 function removePosition(ticker){
   openPositions=openPositions.filter(function(p){ return p.ticker!==ticker; });
   localStorage.setItem("openPositions",JSON.stringify(openPositions));
