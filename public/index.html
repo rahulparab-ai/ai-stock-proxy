@@ -3056,42 +3056,87 @@ function showToast(msg, type){
 // ─── VOLATILE SWEET SPOT SCANNER ─────────────────────────────────
 async function runVolatileScan(source){
   var minPrice = parseFloat(document.getElementById("vol-min-price").value)||150;
-  var maxPrice = parseFloat(document.getElementById("vol-max-price").value)||200;
-  var minAtr   = parseFloat(document.getElementById("vol-min-atr").value)||15;
-  var maxAtr   = parseFloat(document.getElementById("vol-max-atr").value)||30;
+  var maxPrice = parseFloat(document.getElementById("vol-max-price").value)||5000;
+  var minAtr   = parseFloat(document.getElementById("vol-min-atr").value)||10;
+  var maxAtr   = parseFloat(document.getElementById("vol-max-atr").value)||200;
   var el       = document.getElementById("volatile-results");
 
-  el.innerHTML = '<div class="loading"><div class="spinner"></div><div style="color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;font-size:11px;letter-spacing:2px;">'+(source==="market"?"SCANNING FULL MARKET — THIS MAY TAKE 20-30 SECONDS...":"SCANNING YOUR 120 STOCKS...")+'</div><div class="loadbar"><div class="loadbar-inner"></div></div></div>';
+  el.innerHTML = '<div class="loading"><div class="spinner"></div><div style="color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;font-size:11px;letter-spacing:2px;">'+(source==="market"?"SCANNING FULL MARKET — 20-30 SECONDS...":"SCANNING YOUR 120 STOCKS...")+'</div><div class="loadbar"><div class="loadbar-inner"></div></div></div>';
 
   try {
     var results = [];
 
     if(source === "watchlist"){
-      // Use already-fetched data from last scan if available
-      // Otherwise fetch fresh from stocks.js
-      if(proxyUrl){
-        var resp = await fetch(proxyUrl+"/api/stocks?tickers="+watchlist.join(","));
-        var json = await resp.json();
-        var stocks = json.stocks||[];
-        results = stocks.filter(function(s){
-          if(s.error || s.delisted) return false;
-          var price = s.curr||0;
-          var atr   = s.atr||0;
-          return price >= minPrice && price <= maxPrice && atr >= minAtr && atr <= maxAtr;
+      // First try: use already-fetched stock data from last scanner run
+      var cached = window._lastExclusionReport || [];
+      if(cached.length > 0){
+        results = cached.filter(function(s){
+          if(!s.curr || !s.atr) return false;
+          return s.curr >= minPrice && s.curr <= maxPrice && s.atr >= minAtr && s.atr <= maxAtr;
+        }).map(function(s){
+          return { ticker:s.ticker, curr:s.curr, atr:s.atr, rsi:s.rsi, dipPct:s.dipPct, vol:s.vol, volRatio:s.volRatio };
         }).sort(function(a,b){ return (b.atr||0)-(a.atr||0); });
       }
+
+      // If no cached data, fetch fresh
+      if(results.length === 0 && proxyUrl){
+        var resp = await fetch(proxyUrl+"/api/stocks?tickers="+watchlist.join(","));
+        var json = await resp.json();
+        results = (json.stocks||[]).filter(function(s){
+          if(s.error || s.delisted || !s.curr || !s.atr) return false;
+          return s.curr >= minPrice && s.curr <= maxPrice && s.atr >= minAtr && s.atr <= maxAtr;
+        }).sort(function(a,b){ return (b.atr||0)-(a.atr||0); });
+      }
+
+      // Show all stocks with ATR even if no matches, to help user tune range
+      if(results.length === 0){
+        var allStocks = (window._lastExclusionReport||[]).filter(function(s){ return s.curr && s.atr; });
+        var minActual = Math.min.apply(null, allStocks.map(function(s){return s.atr||0;}).filter(Boolean));
+        var maxActual = Math.max.apply(null, allStocks.map(function(s){return s.atr||0;}).filter(Boolean));
+        var minPrice2 = Math.min.apply(null, allStocks.map(function(s){return s.curr||0;}).filter(Boolean));
+        var maxPrice2 = Math.max.apply(null, allStocks.map(function(s){return s.curr||0;}).filter(Boolean));
+        el.innerHTML = '<div style="background:var(--surface);border:1px solid var(--neon-amber)33;border-radius:var(--radius);padding:16px;text-align:center;">' +
+          '<div style="font-size:11px;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;margin-bottom:10px;">NO STOCKS IN RANGE</div>' +
+          '<div style="font-size:10px;color:var(--text2);font-family:\'Share Tech Mono\',monospace;line-height:2;">' +
+          'Your 120 stocks actual ranges:<br>' +
+          'Price: $'+Math.round(minPrice2)+' — $'+Math.round(maxPrice2)+'<br>' +
+          'ATR: $'+minActual.toFixed(1)+' — $'+maxActual.toFixed(1)+'<br><br>' +
+          '<span style="color:var(--neon-cyan);">Run a Dip/Gap scan first to load ATR data,<br>then try again.</span>' +
+          '</div></div>';
+        return;
+      }
+
     } else {
       // Full market scan via volatility endpoint
+      if(!proxyUrl){ throw new Error("No proxy URL configured in Setup tab"); }
       var url = proxyUrl+"/api/volatility?minPrice="+minPrice+"&maxPrice="+maxPrice+"&minAtr="+minAtr+"&maxAtr="+maxAtr;
       var resp = await fetch(url);
+      if(!resp.ok){ throw new Error("API error: "+resp.status); }
       var json = await resp.json();
+      if(json.error){ throw new Error(json.error); }
       results = json.stocks||[];
+
+      // Show debug info if empty
+      if(results.length === 0){
+        el.innerHTML = '<div style="background:var(--surface);border:1px solid var(--neon-amber)33;border-radius:var(--radius);padding:16px;">' +
+          '<div style="font-size:11px;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;margin-bottom:8px;">NO STOCKS FOUND</div>' +
+          '<div style="font-size:10px;color:var(--text2);font-family:\'Share Tech Mono\',monospace;line-height:2;">' +
+          'Scanned: '+(json.scanned||0)+' stocks in $'+minPrice+'-$'+maxPrice+' range<br>' +
+          'Total candidates: '+(json.total||0)+'<br>' +
+          (json.message||"Try widening your ATR range") +
+          '</div></div>';
+        return;
+      }
     }
 
     renderVolatileResults(results, minPrice, maxPrice, minAtr, maxAtr, source);
 
   } catch(err) {
-    el.innerHTML = '<div style="background:var(--surface);border:1px solid var(--neon-pink)33;border-radius:var(--radius);padding:14px;color:var(--neon-pink);font-family:\'Share Tech Mono\',monospace;font-size:11px;">⚠ Error: '+err.message+'</div>';
+    console.error("[Volatile] Error:", err);
+    el.innerHTML = '<div style="background:var(--surface);border:1px solid var(--neon-pink)33;border-radius:var(--radius);padding:14px;">' +
+      '<div style="color:var(--neon-pink);font-family:\'Share Tech Mono\',monospace;font-size:11px;margin-bottom:6px;">⚠ ERROR: '+err.message+'</div>' +
+      '<div style="color:var(--text3);font-family:\'Share Tech Mono\',monospace;font-size:10px;">For SCAN MY 120 STOCKS: run a Dip or Gap scan first to load data.<br>For SCAN FULL MARKET: check Vercel deployment of api/volatility.js</div>' +
+      '</div>';
   }
 }
 
