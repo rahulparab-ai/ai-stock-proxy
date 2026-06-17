@@ -1,15 +1,24 @@
 // ─────────────────────────────────────────────────────────────────
-// Vercel Serverless Function — Volatile Sweet Spot Scanner
-// Finds stocks in a price range with high ATR (daily volatility)
-// GET /api/volatility?minPrice=150&maxPrice=200&minAtr=15&maxAtr=20
+// Vercel Serverless Function — Volatile Sweet Spot Scanner v2
+// Uses Polygon snapshot + ATR to find volatile stocks in price range
+// GET /api/volatility?minPrice=150&maxPrice=300&minAtr=15&maxAtr=20
 // ─────────────────────────────────────────────────────────────────
 
 const POLY_KEY = process.env.POLYGON_API_KEY;
 const BASE     = "https://api.polygon.io";
 
-// Cache results 30 mins — ATR doesn't change intraday
 let cache = { data: null, ts: 0, key: "" };
 const CACHE_MS = 30 * 60 * 1000;
+
+function isRealStock(ticker) {
+  if (!ticker) return false;
+  if (ticker.endsWith("W")) return false;
+  if (ticker.endsWith("R")) return false;
+  if (ticker.endsWith("Z")) return false;
+  if (ticker.includes(".")) return false;
+  if (ticker.length > 5)   return false;
+  return true;
+}
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
@@ -17,109 +26,139 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const minPrice = parseFloat(req.query.minPrice || 150);
-  const maxPrice = parseFloat(req.query.maxPrice || 200);
+  const maxPrice = parseFloat(req.query.maxPrice || 300);
   const minAtr   = parseFloat(req.query.minAtr   || 15);
-  const maxAtr   = parseFloat(req.query.maxAtr   || 20);
+  const maxAtr   = parseFloat(req.query.maxAtr   || 30);
   const cacheKey = `${minPrice}-${maxPrice}-${minAtr}-${maxAtr}`;
   const now      = Date.now();
 
-  // Return cached if fresh and same params
   if (cache.data && cache.key === cacheKey && (now - cache.ts) < CACHE_MS) {
     return res.status(200).json({ ...cache.data, cached: true });
   }
 
   try {
-    // ── STEP 1: Get all US stock snapshots grouped by day ─────────
-    // Polygon /v2/aggs/grouped/locale/us/market/stocks/{date}
-    // Returns OHLCV for all US stocks for a given day
-    // We use this to get current prices and filter by range
+    // ── STEP 1: Get gainers + losers snapshots for active stocks ──
+    // These are the most actively moving stocks — best candidates
+    const [gainersResp, losersResp] = await Promise.all([
+      fetch(`${BASE}/v2/snapshot/locale/us/markets/stocks/gainers?apiKey=${POLY_KEY}`),
+      fetch(`${BASE}/v2/snapshot/locale/us/markets/stocks/losers?apiKey=${POLY_KEY}`),
+    ]);
+    const gainersJson = await gainersResp.json();
+    const losersJson  = await losersResp.json();
 
-    // Get yesterday's date (most recent trading day close)
-    const today = new Date();
-    const et    = new Date(today.toLocaleString("en-US", { timeZone: "America/New_York" }));
-    // Go back to last Friday if weekend
-    let targetDate = new Date(et);
-    if (targetDate.getDay() === 0) targetDate.setDate(targetDate.getDate() - 2);
-    if (targetDate.getDay() === 6) targetDate.setDate(targetDate.getDate() - 1);
-    const dateStr = targetDate.toISOString().split("T")[0];
+    const allSnaps = [
+      ...(gainersJson.tickers || []),
+      ...(losersJson.tickers  || []),
+    ];
 
-    // ── STEP 2: Use snapshot to get all tickers with current price ──
-    // Filter by price range first using the snapshot gainers/losers won't work
-    // Instead use ticker details with financials — but that's slow
-    // Best approach: fetch grouped daily bars and filter by price
-    const groupedUrl = `${BASE}/v2/aggs/grouped/locale/us/market/stocks/${dateStr}?adjusted=true&apiKey=${POLY_KEY}`;
-    const groupedResp = await fetch(groupedUrl);
-    const groupedJson = await groupedResp.json();
+    // ── STEP 2: Also get snapshots for a broader set of tickers ──
+    // Use popular semiconductor + AI + tech tickers beyond our 120
+    const BROAD_TICKERS = [
+      // High-price semiconductors and tech likely in $150-$300 range
+      "NVDA","AMD","MRVL","QCOM","ARM","AVGO","AMAT","LRCX","KLAC","ASML",
+      "MU","TSM","INTC","TXN","ADI","MCHP","ON","NXPI","STM","SWKS",
+      "SNPS","CDNS","CRWD","PANW","ZS","NET","DDOG","SNOW","PLTR","COIN",
+      "MSFT","AAPL","AMZN","GOOGL","META","TSLA","ORCL","CRM","NOW","ADBE",
+      "IBM","ANET","CSCO","DELL","HPE","VRT","SMCI","RDDT","GTLB","MDB",
+      "HUBS","PATH","ISRG","GEV","VST","CEG","ETN","ROK","SYM","IONQ",
+      "RGTI","QUBT","APLD","CORZ","IREN","WULF","WDC","STX","SNDK","COHR",
+      "ASX","AMKR","KLIC","TTMI","ALAB","CRDO","AMBA","MBLY","INDI","AXTI",
+      "ENTG","WOLF","LIN","APD","DD","MTRN","TER","ONTO","ACLS","AZTA",
+      "VECO","UCTT","ICHR","COHU","PLAB","RMBS","CEVA","IDCC","CBRS","GFS",
+      "UMC","TSEM","MPWR","MTSI","LSCC","SLAB","SMTC","CRUS","ALGM","MXL",
+      // Additional high-volatility stocks commonly in this range
+      "NFLX","SHOP","SQ","ROKU","UBER","LYFT","SNAP","PINS","TWLO","ZM",
+      "DOCU","OKTA","SPLK","ESTC","DDOG","PD","COUP","VEEV","HUBS","BILL",
+      "CFLT","GTLB","FRSH","BRZE","S","ASAN","DBX","BOX","DOCN","DT",
+    ];
 
-    if (!groupedJson.results) {
-      return res.status(200).json({ stocks: [], error: "No market data for " + dateStr, fetchedAt: new Date().toISOString() });
+    // Fetch snapshot for broad list
+    const chunks = [];
+    for (let i = 0; i < BROAD_TICKERS.length; i += 50) {
+      chunks.push(BROAD_TICKERS.slice(i, i + 50));
     }
+    const snapResponses = await Promise.all(
+      chunks.map(chunk =>
+        fetch(`${BASE}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=${chunk.join(",")}&apiKey=${POLY_KEY}`)
+          .then(r => r.json())
+      )
+    );
+    const broadSnaps = snapResponses.flatMap(r => r.tickers || []);
 
-    // Filter by price range and minimum volume (liquid stocks only)
-    const priceFiltered = (groupedJson.results || []).filter(bar => {
-      const price  = bar.c || 0;
-      const vol    = bar.v || 0;
-      const ticker = bar.T || "";
-      // Price in range
+    // Combine all snapshots, deduplicate
+    const seen = new Set();
+    const combined = [...allSnaps, ...broadSnaps].filter(s => {
+      if (!s.ticker || seen.has(s.ticker)) return false;
+      seen.add(s.ticker);
+      return true;
+    });
+
+    // ── STEP 3: Filter by price range ────────────────────────────
+    const priceFiltered = combined.filter(s => {
+      const price = s.day?.c || s.lastTrade?.p || s.prevDay?.c || 0;
+      const vol   = s.day?.v || 0;
+      if (!isRealStock(s.ticker)) return false;
       if (price < minPrice || price > maxPrice) return false;
-      // Minimum volume — avoid illiquid stocks
-      if (vol < 500000) return false;
-      // No warrants, rights, SPACs
-      if (ticker.endsWith("W") || ticker.endsWith("R") || ticker.endsWith("Z")) return false;
-      if (ticker.includes(".")) return false;
-      if (ticker.length > 5) return false;
-      // Reasonable daily range — rough ATR proxy using single day
-      const dayRange = (bar.h || 0) - (bar.l || 0);
-      if (dayRange < minAtr * 0.5) return false; // quick pre-filter
+      if (vol < 200000) return false;
       return true;
     });
 
     if (priceFiltered.length === 0) {
-      return res.status(200).json({ stocks: [], message: "No stocks in price range", fetchedAt: new Date().toISOString() });
+      return res.status(200).json({
+        stocks: [], count: 0, scanned: combined.length,
+        message: `No stocks found in $${minPrice}-$${maxPrice} range from ${combined.length} candidates`,
+        fetchedAt: new Date().toISOString()
+      });
     }
 
-    // ── STEP 3: Fetch ATR for filtered tickers in batches ─────────
-    // ATR needs 14 days of data — fetch in parallel batches
-    // Limit to top 50 by volume to keep API calls manageable
-    const top50 = priceFiltered
-      .sort((a, b) => (b.v || 0) - (a.v || 0))
-      .slice(0, 50);
-
+    // ── STEP 4: Fetch ATR + RSI for price-filtered stocks ────────
     const atrResults = await Promise.all(
-      top50.map(async bar => {
-        const ticker = bar.T;
+      priceFiltered.map(async snap => {
+        const ticker = snap.ticker;
+        const price  = snap.day?.c || snap.lastTrade?.p || snap.prevDay?.c || 0;
+        const vol    = snap.day?.v || 0;
+        const chgPct = snap.todaysChangePerc || 0;
+
         try {
-          const atrUrl = `${BASE}/v1/indicators/atr/${ticker}?timespan=day&adjusted=true&window=14&series_type=close&limit=1&apiKey=${POLY_KEY}`;
-          const atrJson = await (await fetch(atrUrl)).json();
-          const atrVal  = atrJson?.results?.values?.[0]?.value;
-          const atr     = atrVal ? parseFloat(atrVal.toFixed(2)) : null;
+          const [atrResp, rsiResp] = await Promise.all([
+            fetch(`${BASE}/v1/indicators/atr/${ticker}?timespan=day&adjusted=true&window=14&series_type=close&limit=1&apiKey=${POLY_KEY}`),
+            fetch(`${BASE}/v1/indicators/rsi/${ticker}?timespan=day&adjusted=true&window=14&series_type=close&limit=1&apiKey=${POLY_KEY}`),
+          ]);
+          const atrJson = await atrResp.json();
+          const rsiJson = await rsiResp.json();
+          const atr = atrJson?.results?.values?.[0]?.value;
+          const rsi = rsiJson?.results?.values?.[0]?.value;
 
-          // Also get RSI
-          const rsiUrl  = `${BASE}/v1/indicators/rsi/${ticker}?timespan=day&adjusted=true&window=14&series_type=close&limit=1&apiKey=${POLY_KEY}`;
-          const rsiJson = await (await fetch(rsiUrl)).json();
-          const rsiVal  = rsiJson?.results?.values?.[0]?.value;
-          const rsi     = rsiVal ? parseFloat(rsiVal.toFixed(1)) : null;
-
-          return { ticker, atr, rsi, curr: bar.c, vol: bar.v, high: bar.h, low: bar.l, open: bar.o };
+          return {
+            ticker,
+            curr:   parseFloat(price.toFixed(2)),
+            atr:    atr ? parseFloat(parseFloat(atr).toFixed(2)) : null,
+            rsi:    rsi ? parseFloat(parseFloat(rsi).toFixed(1)) : null,
+            vol:    Math.floor(vol),
+            dipPct: parseFloat(chgPct.toFixed(2)),
+            high:   snap.day?.h || price,
+            low:    snap.day?.l || price,
+            dayRange: snap.day?.h && snap.day?.l ? parseFloat((snap.day.h - snap.day.l).toFixed(2)) : null,
+          };
         } catch (_) {
-          return { ticker, atr: null, rsi: null, curr: bar.c, vol: bar.v };
+          return { ticker, curr: price, atr: null, rsi: null, vol, dipPct: chgPct };
         }
       })
     );
 
-    // ── STEP 4: Filter by ATR range ───────────────────────────────
+    // ── STEP 5: Filter by ATR range, sort by ATR desc ────────────
     const qualifying = atrResults
       .filter(s => s.atr !== null && s.atr >= minAtr && s.atr <= maxAtr)
-      .sort((a, b) => (b.atr || 0) - (a.atr || 0)); // highest ATR first
+      .sort((a, b) => (b.atr || 0) - (a.atr || 0));
 
     const result = {
-      stocks:    qualifying,
-      count:     qualifying.length,
-      scanned:   top50.length,
-      dateStr,
+      stocks:   qualifying,
+      count:    qualifying.length,
+      scanned:  priceFiltered.length,
+      total:    combined.length,
       minPrice, maxPrice, minAtr, maxAtr,
       fetchedAt: new Date().toISOString(),
-      cached:    false,
+      cached:   false,
     };
 
     cache = { data: result, ts: now, key: cacheKey };
