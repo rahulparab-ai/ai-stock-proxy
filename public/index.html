@@ -875,7 +875,7 @@
         </div>
         <div>
           <div style="font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">MAX PRICE $</div>
-          <input id="vol-max-price" type="number" value="200" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
+          <input id="vol-max-price" type="number" value="300" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
         </div>
         <div>
           <div style="font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">MIN ATR $</div>
@@ -883,7 +883,7 @@
         </div>
         <div>
           <div style="font-size:8px;color:var(--text3);letter-spacing:1px;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">MAX ATR $</div>
-          <input id="vol-max-atr" type="number" value="20" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
+          <input id="vol-max-atr" type="number" value="30" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text);font-size:12px;font-family:'Share Tech Mono',monospace;outline:none;">
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -3058,7 +3058,7 @@ async function runVolatileScan(source){
   var minPrice = parseFloat(document.getElementById("vol-min-price").value)||150;
   var maxPrice = parseFloat(document.getElementById("vol-max-price").value)||200;
   var minAtr   = parseFloat(document.getElementById("vol-min-atr").value)||15;
-  var maxAtr   = parseFloat(document.getElementById("vol-max-atr").value)||20;
+  var maxAtr   = parseFloat(document.getElementById("vol-max-atr").value)||30;
   var el       = document.getElementById("volatile-results");
 
   el.innerHTML = '<div class="loading"><div class="spinner"></div><div style="color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;font-size:11px;letter-spacing:2px;">'+(source==="market"?"SCANNING FULL MARKET — THIS MAY TAKE 20-30 SECONDS...":"SCANNING YOUR 120 STOCKS...")+'</div><div class="loadbar"><div class="loadbar-inner"></div></div></div>';
