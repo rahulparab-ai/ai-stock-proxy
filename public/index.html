@@ -3169,15 +3169,51 @@ function renderVolatileResults(stocks, minPrice, maxPrice, minAtr, maxAtr, sourc
     var atrPct  = s.atr && s.curr ? ((s.atr/s.curr)*100).toFixed(1) : "--";
     var sharesNeeded = s.atr ? Math.ceil(200/s.atr) : "--";
     var totalCost    = (sharesNeeded!=="--" && s.curr) ? "$"+(sharesNeeded*s.curr).toFixed(0) : "--";
-    var dipColor     = (s.dipPct||0) < -1 ? "var(--neon-green)" : (s.dipPct||0) > 1 ? "var(--neon-pink)" : "var(--text3)";
 
-    html += '<div style="background:var(--surface);border:1px solid var(--neon-amber)22;border-left:2px solid var(--neon-amber);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
+    // Direction — is stock up or down today?
+    var dip        = s.dipPct||0;
+    var isUp       = dip > 0.5;
+    var isDown     = dip < -0.5;
+    var dirColor   = isUp ? "var(--neon-green)" : isDown ? "var(--neon-pink)" : "var(--text3)";
+    var dirIcon    = isUp ? "▲" : isDown ? "▼" : "—";
+    var dirLabel   = isUp ? "UP" : isDown ? "DOWN" : "FLAT";
+    var dirBorder  = isUp ? "var(--neon-green)" : isDown ? "var(--neon-pink)" : "var(--border)";
+
+    // ATR direction — is today's range EXPANDING (above avg) or CONTRACTING?
+    // Compare today's range (high-low) to the stored ATR (14-day avg)
+    var todayRange = (s.high && s.low) ? parseFloat((s.high - s.low).toFixed(2)) : null;
+    var atrExpanding = todayRange && s.atr ? todayRange > s.atr * 1.1 : null;
+    var atrContracting = todayRange && s.atr ? todayRange < s.atr * 0.9 : null;
+    var atrStatus, atrStatusColor;
+    if(atrExpanding){
+      atrStatus = "↑ EXPANDING";
+      atrStatusColor = "var(--neon-green)";
+    } else if(atrContracting){
+      atrStatus = "↓ CONTRACTING";
+      atrStatusColor = "var(--neon-pink)";
+    } else {
+      atrStatus = "→ NORMAL";
+      atrStatusColor = "var(--neon-amber)";
+    }
+
+    html += '<div style="background:var(--surface);border:1px solid '+dirBorder+'22;border-left:2px solid '+dirBorder+';border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
+
+    // Header row
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
     html += '<span style="font-size:14px;font-weight:700;color:var(--neon-amber);font-family:\'Share Tech Mono\',monospace;text-shadow:var(--glow-amber);width:60px;">'+s.ticker+'</span>';
     html += '<span style="font-size:14px;font-weight:700;color:var(--text);font-family:\'Share Tech Mono\',monospace;">$'+(s.curr||"--")+'</span>';
-    if(s.dipPct && s.dipPct!==0) html += '<span style="font-size:11px;color:'+dipColor+';font-family:\'Share Tech Mono\',monospace;">'+(s.dipPct>0?"+":"")+s.dipPct+'%</span>';
+    // Direction badge
+    html += '<span style="font-size:9px;font-weight:700;color:'+dirColor+';border:1px solid '+dirColor+'66;padding:2px 8px;border-radius:2px;font-family:\'Share Tech Mono\',monospace;">'+dirIcon+' '+dirLabel+' '+(dip!==0?(dip>0?"+":"")+dip+'%':'')+'</span>';
     html += '<span style="margin-left:auto;font-size:8px;color:var(--neon-amber);border:1px solid var(--neon-amber)44;padding:2px 8px;border-radius:2px;font-family:\'Share Tech Mono\',monospace;">ATR $'+(s.atr||"--")+'</span>';
     html += '</div>';
+
+    // ATR status bar
+    if(todayRange){
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--surface2);border-radius:var(--radius);padding:6px 10px;">';
+      html += '<span style="font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">TODAY\'S RANGE: <span style="color:var(--text);">$'+todayRange+'</span></span>';
+      html += '<span style="font-size:9px;font-weight:700;color:'+atrStatusColor+';font-family:\'Share Tech Mono\',monospace;margin-left:auto;">'+atrStatus+'</span>';
+      html += '</div>';
+    }
 
     // Stats grid
     html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px;">';
