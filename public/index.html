@@ -1497,7 +1497,12 @@ async function runScan(){
 
       const failed=(json.stocks||[]).filter(s=>s.error&&!s.delisted).map(s=>s.ticker);
       const mktOpen = json.marketOpen;
-      let mktMsg = mktOpen ? "🟢 MARKET OPEN — live prices (Polygon Starter)" : "🔵 MARKET CLOSED — showing last close prices";
+      const extHours = json.extendedHours;
+      let mktMsg = mktOpen
+        ? "🟢 MARKET OPEN — live real-time prices"
+        : extHours
+          ? "🌙 EXTENDED HOURS — live pre/post-market prices"
+          : "🔵 MARKET CLOSED — showing last close prices";
       if (json.broadRallyDay)   mktMsg = "🚀 BROAD MARKET RALLY DAY — " + json.upMoreThan1Pct + " stocks up >1% — volume naturally lower";
       if (json.broadSelloffDay) mktMsg = "🔻 BROAD SELLOFF DAY — " + json.downMoreThan1Pct + " stocks down >1% — prime dip bounce day";
       showStatus(failed.length ? "⚠️ Missing data: " + failed.join(", ") : mktMsg, failed.length ? "warn" : "ok");
