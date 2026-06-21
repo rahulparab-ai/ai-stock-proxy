@@ -156,7 +156,8 @@ export default async function handler(req, res) {
 
       // ── PRIORITY 2: Quotes — Liquidity Check ──────────────────
       // Requires Advanced plan ($199) — real-time NBBO quote
-      if (marketOpen) {
+      // Available during regular hours AND extended hours (pre/post market)
+      if (marketOpen || extendedHours) {
         try {
           const quoteUrl = `${BASE}/v3/quotes/${ticker}?order=desc&limit=1&sort=timestamp&apiKey=${POLY_KEY}`;
           const quoteJson = await (await fetch(quoteUrl)).json();
@@ -296,7 +297,7 @@ export default async function handler(req, res) {
 
       // ── DIP ──────────────────────────────────────────────────────
       const dipDollars = parseFloat((prev - curr).toFixed(2));
-      const dipPct = !marketOpen ? 0
+      const dipPct = (!marketOpen && !extendedHours) ? 0
         : snap.todaysChangePerc != null
           ? parseFloat(snap.todaysChangePerc.toFixed(2))
           : (prev > 0 ? parseFloat((((curr-prev)/prev)*100).toFixed(2)) : 0);
