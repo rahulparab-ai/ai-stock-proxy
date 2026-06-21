@@ -1603,7 +1603,9 @@ async function runScan(){
       ? " NEWS=["+s.newsStr+"]"
       : " NEWS=[none]";
     var blStr   = (window._baseline||{})[s.ticker] ? " baseline=$"+window._baseline[s.ticker].price : "";
-    return s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " " + volStr + vwapStr + atrStr + newsStr + blStr;
+    var liqStr  = s.liquidity ? " LIQUIDITY="+s.liquidity.liquidity+"(spread "+s.liquidity.spreadPct+"%, "+s.liquidity.pressureSignal+")" : "";
+    var smStr   = (s.smartMoney && s.smartMoney.signal!=="NONE") ? " SMARTMONEY="+s.smartMoney.signal+"("+s.smartMoney.blockTradeCount+" blocks)" : "";
+    return s.ticker + ": $" + s.curr + " dip=" + s.dipPct + "% RSI=" + (s.rsi||"N/A") + " " + volStr + vwapStr + atrStr + newsStr + blStr + liqStr + smStr;
   }).join("\n");
   console.log("[Scanner] Must-check (>=1.5% dip):", mustCheck.map(s=>s.ticker).join(", "));
   console.log("[Scanner] Maybe-watch (0.8-1.5%):", maybeWatch.map(s=>s.ticker).join(", "));
@@ -1680,6 +1682,19 @@ async function runScan(){
     "    IMPORTANT: only flag OVERNIGHT if RSI < 38 OR dip > 4% with clear institutional support.",
     "",
     "Set targetPrice at minimum " + dipMinTarget + " above entry. Calculate shares needed to reach $" + dailyGoal + " profit.",
+    "",
+    "LIQUIDITY data (when present in DATA as LIQUIDITY=...) — real-time bid/ask spread:",
+    "  EXCELLENT/GOOD = safe to enter, tight spread, low slippage risk",
+    "  FAIR = acceptable but expect some slippage on entry/exit",
+    "  POOR = wide spread, risky — require RSI/dip signal to be very strong to justify, lower confidence",
+    "  BUY_PRESSURE = more bid size than ask = institutions accumulating = bullish for bounce",
+    "  SELL_PRESSURE = more ask size = selling pressure continuing = be cautious on dip bounce",
+    "",
+    "SMARTMONEY data (when present as SMARTMONEY=...) — large block trades detected:",
+    "  INSTITUTIONAL_BUYING = large buy-side blocks hitting tape = strong bounce confirmation, boost confidence +5-10pts",
+    "  INSTITUTIONAL_SELLING = large sell-side blocks = institutions still dumping, do NOT buy the dip yet even if RSI low",
+    "  MIXED_ACTIVITY = no clear direction from block trades, treat as neutral",
+    "  This is your strongest signal — it directly shows what large players are doing right now, ahead of price confirmation.",
     "",
     "NEWS FILTER — news headlines from last 7 days are included in DATA.",
     "Evaluate each stock's news carefully before flagging as BUY:",
@@ -2688,6 +2703,39 @@ function renderResult(result, data, appendMode, noTransparency){
 
       html += '<div class="trade-reason">' + (trade.reason||"") + '</div>';
       html += '<div class="' + newsClass + '">NEWS: ' + (trade.newsFlag||"") + ' - ' + (trade.newsSummary||"") + '</div>';
+
+      // PRIORITY 2: Liquidity Check badge
+      if(sd.liquidity){
+        var liq = sd.liquidity;
+        var liqColor = liq.liquidity==="EXCELLENT" ? "var(--neon-green)"
+          : liq.liquidity==="GOOD" ? "var(--neon-cyan)"
+          : liq.liquidity==="FAIR" ? "var(--neon-amber)"
+          : "var(--neon-pink)";
+        var pressColor = liq.pressureSignal==="BUY_PRESSURE" ? "var(--neon-green)"
+          : liq.pressureSignal==="SELL_PRESSURE" ? "var(--neon-pink)"
+          : "var(--text3)";
+        var pressIcon = liq.pressureSignal==="BUY_PRESSURE" ? "▲" : liq.pressureSignal==="SELL_PRESSURE" ? "▼" : "—";
+        html += '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid '+liqColor+'33;border-radius:7px;padding:8px 12px;margin-bottom:8px;flex-wrap:wrap;">';
+        html += '<span style="font-size:9px;font-weight:700;color:'+liqColor+';letter-spacing:1px;font-family:\'Share Tech Mono\',monospace;">💧 LIQUIDITY: '+liq.liquidity+'</span>';
+        html += '<span style="font-size:9px;color:var(--text3);font-family:\'Share Tech Mono\',monospace;">spread '+liq.spreadPct+'%</span>';
+        html += '<span style="font-size:9px;color:'+pressColor+';font-family:\'Share Tech Mono\',monospace;margin-left:auto;">'+pressIcon+' '+liq.pressureSignal.replace('_',' ')+'</span>';
+        html += '</div>';
+      }
+
+      // PRIORITY 4: Smart Money Detector badge
+      if(sd.smartMoney && sd.smartMoney.signal !== "NONE"){
+        var sm = sd.smartMoney;
+        var smColor = sm.signal==="INSTITUTIONAL_BUYING" ? "var(--neon-green)"
+          : sm.signal==="INSTITUTIONAL_SELLING" ? "var(--neon-pink)"
+          : "var(--neon-amber)";
+        var smIcon = sm.signal==="INSTITUTIONAL_BUYING" ? "🟢" : sm.signal==="INSTITUTIONAL_SELLING" ? "🔴" : "🟡";
+        var smLabel = sm.signal.replace(/_/g,' ');
+        html += '<div style="background:'+smColor+'11;border:1px solid '+smColor+'33;border-radius:7px;padding:8px 12px;margin-bottom:8px;">';
+        html += '<div style="font-size:9px;font-weight:700;color:'+smColor+';letter-spacing:1px;font-family:\'Share Tech Mono\',monospace;">'+smIcon+' SMART MONEY: '+smLabel+'</div>';
+        html += '<div style="font-size:9px;color:'+smColor+'99;margin-top:2px;font-family:\'Share Tech Mono\',monospace;">'+sm.blockTradeCount+' block trades ('+sm.blockPctOfVolume+'% of volume) — largest '+sm.largestTrade.toLocaleString()+' shares</div>';
+        html += '</div>';
+      }
+
       html += '<div class="price-grid">';
       html += '<div class="price-cell"><div class="price-label">CURRENT</div><div class="price-val" style="color:var(--text)">$' + (sd.curr||trade.entryPrice||"--") + '</div></div>';
       html += '<div class="price-cell"><div class="price-label">DIP</div><div class="price-val" style="color:#ff6b6b">' + (sd.dipPct?sd.dipPct+"%":"--") + '</div></div>';
