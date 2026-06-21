@@ -1,7 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
-// Vercel Serverless Function — Stock Data Proxy (Polygon Starter)
-// v6: Speed fix — RSI/ATR cached per session (daily indicators)
-//     News cached 15 mins. Prices always live. Never times out.
+// Vercel Serverless Function — Stock Data Proxy (Polygon Advanced $199)
+// v7: Real-time data (no 15-min delay). Adds Liquidity Check (quotes)
+//     and Smart Money Detector (trades) for top 20 movers.
+//     RSI/ATR cached per session. News cached 15 mins.
 // ─────────────────────────────────────────────────────────────────
 
 const POLY_KEY = process.env.POLYGON_API_KEY;
@@ -29,6 +30,19 @@ function isMarketOpen() {
   return mins >= 570 && mins < 960;
 }
 
+// Extended hours: 4:00am-9:30am pre-market, 4:00pm-8:00pm after-hours
+// Requires Advanced plan ($199) for live extended-hours quotes/trades
+function isExtendedHours() {
+  const now = new Date();
+  const et  = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const day  = et.getDay();
+  const mins = et.getHours() * 60 + et.getMinutes();
+  if (day === 0 || day === 6) return false;
+  const preMarket   = mins >= 240 && mins < 570;   // 4:00am - 9:30am
+  const afterHours  = mins >= 960 && mins < 1200;  // 4:00pm - 8:00pm
+  return preMarket || afterHours;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -39,7 +53,8 @@ export default async function handler(req, res) {
 
   const tickerList = tickers.split(",").map(t => t.trim().toUpperCase());
   const now        = Date.now();
-  const marketOpen = isMarketOpen();
+  const marketOpen    = isMarketOpen();
+  const extendedHours = isExtendedHours();
 
   try {
     // ── STEP 1: Snapshot — ONE fast call for all 120 tickers ─────
@@ -102,8 +117,10 @@ export default async function handler(req, res) {
       if (needDailyRefresh) dailyCache.ts = now;
     }
 
-    // ── STEP 5: avgVol + news — for top 20 movers only ───────────
-    const avgVolMap = {};
+    // ── STEP 5: avgVol + news + quotes + trades — top 20 movers ──
+    const avgVolMap   = {};
+    const quoteMap     = {};   // ticker → {spread, spreadPct, bidSize, askSize, imbalance}
+    const smartMoneyMap= {};   // ticker → {blockTrades, blockVolume, avgTradeSize, signal}
     const top20     = movers.slice(0, 20);
     const today     = new Date();
     const from      = new Date(today - 30*24*60*60*1000).toISOString().split("T")[0];
@@ -122,18 +139,97 @@ export default async function handler(req, res) {
 
       // News — 15 min cache
       const cached = newsCache[ticker];
-      if (cached && (now - cached.ts) < NEWS_CACHE_MS) return;
-      try {
-        const threeDaysAgo = new Date(today - 7*24*60*60*1000).toISOString().split("T")[0];
-        const newsUrl = `${BASE}/v2/reference/news?ticker=${ticker}&published_utc.gte=${threeDaysAgo}&order=desc&limit=3&apiKey=${POLY_KEY}`;
-        const newsJson = await (await fetch(newsUrl)).json();
-        const headlines = (newsJson.results||[]).map(a=>({
-          title:     a.title||"",
-          published: (a.published_utc||"").slice(0,10),
-          sentiment: a.insights?.find(i=>i.ticker===ticker)?.sentiment||"neutral",
-        }));
-        newsCache[ticker] = { headlines, ts: now };
-      } catch (_) { newsCache[ticker] = { headlines: [], ts: now }; }
+      const needNews = !(cached && (now - cached.ts) < NEWS_CACHE_MS);
+      if (needNews) {
+        try {
+          const threeDaysAgo = new Date(today - 7*24*60*60*1000).toISOString().split("T")[0];
+          const newsUrl = `${BASE}/v2/reference/news?ticker=${ticker}&published_utc.gte=${threeDaysAgo}&order=desc&limit=3&apiKey=${POLY_KEY}`;
+          const newsJson = await (await fetch(newsUrl)).json();
+          const headlines = (newsJson.results||[]).map(a=>({
+            title:     a.title||"",
+            published: (a.published_utc||"").slice(0,10),
+            sentiment: a.insights?.find(i=>i.ticker===ticker)?.sentiment||"neutral",
+          }));
+          newsCache[ticker] = { headlines, ts: now };
+        } catch (_) { newsCache[ticker] = { headlines: [], ts: now }; }
+      }
+
+      // ── PRIORITY 2: Quotes — Liquidity Check ──────────────────
+      // Requires Advanced plan ($199) — real-time NBBO quote
+      if (marketOpen) {
+        try {
+          const quoteUrl = `${BASE}/v3/quotes/${ticker}?order=desc&limit=1&sort=timestamp&apiKey=${POLY_KEY}`;
+          const quoteJson = await (await fetch(quoteUrl)).json();
+          const q = quoteJson?.results?.[0];
+          if (q && q.bid_price > 0 && q.ask_price > 0) {
+            const spread    = parseFloat((q.ask_price - q.bid_price).toFixed(4));
+            const mid       = (q.ask_price + q.bid_price) / 2;
+            const spreadPct = mid > 0 ? parseFloat(((spread/mid)*100).toFixed(3)) : null;
+            const bidSize   = q.bid_size || 0;
+            const askSize   = q.ask_size || 0;
+            const imbalance = (bidSize+askSize) > 0
+              ? parseFloat((((bidSize-askSize)/(bidSize+askSize))*100).toFixed(1))
+              : 0;
+            quoteMap[ticker] = {
+              bid: q.bid_price, ask: q.ask_price, spread, spreadPct,
+              bidSize, askSize, imbalance,
+              // Liquidity rating: tight spread = safe, wide = risky
+              liquidity: spreadPct === null ? "UNKNOWN"
+                : spreadPct < 0.05 ? "EXCELLENT"
+                : spreadPct < 0.15 ? "GOOD"
+                : spreadPct < 0.40 ? "FAIR"
+                : "POOR",
+              // Imbalance signal: positive = more bid size (buy pressure)
+              pressureSignal: imbalance > 20 ? "BUY_PRESSURE"
+                : imbalance < -20 ? "SELL_PRESSURE"
+                : "NEUTRAL",
+            };
+          }
+        } catch (_) {}
+
+        // ── PRIORITY 4: Trades — Smart Money Detector ────────────
+        // Requires Advanced plan ($199) — individual trade-level data
+        // Detect large block trades that may signal institutional activity
+        try {
+          const tradesUrl = `${BASE}/v3/trades/${ticker}?order=desc&limit=200&sort=timestamp&apiKey=${POLY_KEY}`;
+          const tradesJson = await (await fetch(tradesUrl)).json();
+          const trades = tradesJson?.results || [];
+          if (trades.length > 0) {
+            const sizes = trades.map(t => t.size || 0);
+            const avgTradeSize = sizes.reduce((s,v)=>s+v,0) / sizes.length;
+            // Block trade = 5x+ the average trade size in this sample, min 1000 shares
+            const blockThreshold = Math.max(1000, avgTradeSize * 5);
+            const blockTrades = trades.filter(t => (t.size||0) >= blockThreshold);
+            const blockVolume = blockTrades.reduce((s,t)=>s+(t.size||0), 0);
+            const totalVolume = sizes.reduce((s,v)=>s+v,0);
+            const blockPctOfVolume = totalVolume > 0
+              ? parseFloat(((blockVolume/totalVolume)*100).toFixed(1)) : 0;
+
+            // Determine buy/sell bias of block trades using price vs quote at trade time
+            // Simplified: compare block trade prices to overall average price
+            const avgPrice = trades.reduce((s,t)=>s+(t.price||0),0) / trades.length;
+            const blockBuyTrades  = blockTrades.filter(t => (t.price||0) >= avgPrice).length;
+            const blockSellTrades = blockTrades.length - blockBuyTrades;
+
+            let signal = "NONE";
+            if (blockTrades.length >= 3) {
+              if (blockBuyTrades > blockSellTrades * 1.5) signal = "INSTITUTIONAL_BUYING";
+              else if (blockSellTrades > blockBuyTrades * 1.5) signal = "INSTITUTIONAL_SELLING";
+              else signal = "MIXED_ACTIVITY";
+            }
+
+            smartMoneyMap[ticker] = {
+              blockTradeCount: blockTrades.length,
+              blockVolume,
+              blockPctOfVolume,
+              avgTradeSize: Math.round(avgTradeSize),
+              largestTrade: Math.max(...sizes, 0),
+              signal,
+              sampleSize: trades.length,
+            };
+          }
+        } catch (_) {}
+      }
     }));
 
     // ── STEP 6: Build results ─────────────────────────────────────
@@ -163,7 +259,7 @@ export default async function handler(req, res) {
 
       let curr, priceSource;
       if (marketOpen) {
-        // During market hours — use live price
+        // During regular market hours — use live price
         if      (lastTP > 0) { curr = lastTP; priceSource = "last_trade"; }
         else if (minC   > 0) { curr = minC;   priceSource = "min_bar"; }
         else if (dayC   > 0) { curr = dayC;   priceSource = "day_close"; }
@@ -172,9 +268,15 @@ export default async function handler(req, res) {
         // Actual weekend — use Friday's close (prevDay.c)
         curr        = prevC;
         priceSource = "prev_close_weekend";
+      } else if (extendedHours) {
+        // Pre-market (4am-9:30am) or after-hours (4pm-8pm)
+        // On Advanced plan, lastTrade.p reflects LIVE extended-hours trades
+        // This is the actual fix for catching moves like AMD/AVGO after-hours drops
+        if      (lastTP > 0) { curr = lastTP; priceSource = "last_trade_extended"; }
+        else if (dayC   > 0) { curr = dayC;   priceSource = "day_close_today"; }
+        else                 { curr = prevC;   priceSource = "prev_close_fallback"; }
       } else {
-        // Weekday after market close (4pm-9:30am) — use TODAY's close (day.c)
-        // day.c is the official closing price set at 4pm
+        // True market closed window (8pm-4am) — use today's official close
         if      (dayC   > 0) { curr = dayC;   priceSource = "day_close_today"; }
         else if (lastTP > 0) { curr = lastTP; priceSource = "last_trade_ah"; }
         else                 { curr = prevC;   priceSource = "prev_close_fallback"; }
@@ -226,9 +328,15 @@ export default async function handler(req, res) {
         ? newsHeadlines.map(n=>`[${n.published}] ${n.title}${n.sentiment!=="neutral"?` (${n.sentiment})`:""}`).join(" | ")
         : "NO_RECENT_NEWS";
 
+      // ── PRIORITY 2: Liquidity Check ───────────────────────────────
+      const liquidity = quoteMap[ticker] || null;
+
+      // ── PRIORITY 4: Smart Money Detector ──────────────────────────
+      const smartMoney = smartMoneyMap[ticker] || null;
+
       return {
         ticker, curr, prev,
-        priceSource, priceSuspect, marketOpen,
+        priceSource, priceSuspect, marketOpen, extendedHours,
         openPrice, todayHigh, todayLow,
         gapFromOpen, fromOpenDollars,
         dipDollars, dipPct,
@@ -242,6 +350,8 @@ export default async function handler(req, res) {
         distFromLow: 50,
         isMover: movers.includes(ticker),
         news: newsHeadlines, newsStr, newsCount: newsHeadlines.length,
+        liquidity,    // null unless top20 mover during market hours
+        smartMoney,   // null unless top20 mover during market hours
       };
     });
 
@@ -250,7 +360,7 @@ export default async function handler(req, res) {
       fetchedAt:        new Date().toISOString(),
       source:           "polygon.io",
       cached:           false,
-      marketOpen,
+      marketOpen, extendedHours,
       moversCount:      movers.length,
       broadRallyDay,
       broadSelloffDay,
